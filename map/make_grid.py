@@ -14,11 +14,11 @@ WEST, SOUTH, EAST, NORTH = -88.89589344859755, 41.104190944576466, -87.525349015
 # AIRPORTS (Directional Corridor)
 # name, lat, lon, heading_deg, A (peak risk), L_m (Length), W_m (Width)
 AIRPORT_SITES = [
-    ("O'Hare", 41.97807408541273, -87.90902412382081, 90, 120.0, 7000, 1200),
-    ("Midway", 41.7856116663475,  -87.75331135429448, 130, 100.0, 6000, 1000),
-    ("Clow International Airport", 41.695923717435235, -88.12876224517822, 90, 80.0, 4500, 800),
-    ("Lewis University Airport", 41.60690586957971, -88.09526487573747,90, 90, 3500, 1000),
-    ("Brookeridge Airpark", 41.73268507397754, -87.9972105460431, 90, 90, 2500, 1000),
+    ("O'Hare", 41.97807408541273, -87.90902412382081, 90, 120.0, 7000, 2000),
+    ("Midway", 41.7856116663475,  -87.75331135429448, 130, 100.0, 6000, 2000),
+    ("Clow International Airport", 41.695923717435235, -88.12876224517822, 90, 80.0, 4500, 1500),
+    ("Lewis University Airport", 41.60690586957971, -88.09526487573747,90, 90, 3500, 1500),
+    ("Brookeridge Airpark", 41.73268507397754, -87.9972105460431, 90, 90, 2500, 1500),
 ]
 
 # HIGH DENSITY CITIES (High Risk Core)
@@ -46,6 +46,7 @@ MEDIUM_CITY_SITES = [
 
 # NO-FLY ZONES
 # name, lat, lon, radius_m
+# TODO: Look for other no-fly zones in Chicago region
 NO_FLY_SITES = [
     ("Argonne National Lab", 41.7150, -87.9830, 2500),
     ("Fermilab", 41.8407, -88.2620, 2500),
