@@ -134,35 +134,52 @@
 
     // Optional clicked reference point marker
     var clicked = [41.843989628462204, -87.9180908203125];
-    //L.circleMarker(clicked, { radius: 6 }).addTo(mymap).bindPopup("Clicked reference point");
 
-    // ----------------------------
     // Grid Coloring
-    // ----------------------------
-    function colorByClass(riskClass) {
-        if (riskClass === "No-Fly") return "#000000";
-        if (riskClass === "High")   return "#ff6b3b";
-        if (riskClass === "Medium") return "#ffe37a";
-        return "#39e75f"; // Low default
+function colorByDensity(feature) {
+    const p = feature.properties || {};
+
+    // no-fly
+    if (p.density_type === "no-fly" || p.risk_class === "No-Fly") return "#000000";
+
+    const popClass = p.pop_class || "Low";
+    const airClass = p.air_class || "Low";
+    const type = (p.density_type || "low").toLowerCase();
+
+    // LOW always green
+    if (type === "low") return "#2ca25f";
+
+    // POPULATION
+    if (type === "population") {
+        if (popClass === "High") return "#08306b";   // dark blue
+        if (popClass === "Medium") return "#6baed6"; // light blue
+        return "#2ca25f";
     }
 
-    function gridStyle(feature) {
-        const rc = feature.properties?.risk_class || "Low";
-        const c = colorByClass(rc);
-
-        return {
-            color: c,
-            weight: 1,
-            opacity: 0.6,
-            fillColor: c,
-            fillOpacity: 0.25
-        };
+    // AIRSPACE
+    if (type === "airspace") {
+        if (airClass === "High") return "#b30000";   // red
+        if (airClass === "Medium") return "#ffd11a"; // yellow
+        return "#2ca25f";
     }
 
-    // ----------------------------
+    return "#2ca25f";
+}
+
+function gridStyle(feature) {
+    const c = colorByDensity(feature);
+    return {
+        color: "#333",
+        weight: 1,
+        opacity: 0.6,
+        fillColor: c,
+        fillOpacity: 0.55
+    };
+}
+
+
     // Load Grid GeoJSON
-    // ----------------------------
-    out_path = "risk_grid_v2.geojson"
+    out_path = "risk_grid_v3.geojson"
     fetch(out_path)
         .then(r => r.json())
         .then(data => {

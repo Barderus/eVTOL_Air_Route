@@ -16,7 +16,7 @@ WEST, SOUTH, EAST, NORTH = -88.89589344859755, 41.104190944576466, -87.525349015
 AIRPORT_SITES = [
     ("O'Hare", 41.97807408541273, -87.90902412382081, 90, 120.0, 7000, 2000),
     ("Midway", 41.7856116663475,  -87.75331135429448, 130, 100.0, 6000, 2000),
-    ("Clow International Airport", 41.695923717435235, -88.12876224517822, 90, 80.0, 4500, 1500),
+   # ("Clow International Airport", 41.695923717435235, -88.12876224517822, 90, 80.0, 4500, 1500),
     ("Lewis University Airport", 41.60690586957971, -88.09526487573747,90, 90, 3500, 1500),
     ("Brookeridge Airpark", 41.73268507397754, -87.9972105460431, 90, 90, 2500, 1500),
 ]
@@ -113,17 +113,52 @@ for name, lat, lon, B, S in HIGH_CITY_SITES:
     dy = cy - pt.y
     grid_m["city_risk"] += radial_decay(dx, dy, B, S)
 
+# Add the risk to each MEDIUM risk city and add the decay function to it
+for name, lat, lon, B, S in MEDIUM_CITY_SITES:
+    pt = gpd.GeoSeries([Point(lon, lat)], crs=CRS_LL).to_crs(CRS_M).iloc[0]
+    dx = cx - pt.x
+    dy = cy - pt.y
+    grid_m["city_risk"] += radial_decay(dx, dy, B, S)
+
+# Separate density classes so we can have different colors
+grid_m["pop_class"] = "Low"
+grid_m["air_class"] = "Low"
+
+# Tune these independently
+POP_MED_TH = 30
+POP_HIGH_TH = 70
+
+AIR_MED_TH = 30
+AIR_HIGH_TH = 70
+
+grid_m.loc[grid_m["city_risk"] > POP_MED_TH, "pop_class"] = "Medium"
+grid_m.loc[grid_m["city_risk"] > POP_HIGH_TH, "pop_class"] = "High"
+
+grid_m.loc[grid_m["airport_risk"] > AIR_MED_TH, "air_class"] = "Medium"
+grid_m.loc[grid_m["airport_risk"] > AIR_HIGH_TH, "air_class"] = "High"
+
+grid_m["density_type"] = "low"
+
+# if either is medium/high, choose whichever risk value is larger
+dominant_mask = (grid_m["pop_class"] != "Low") | (grid_m["air_class"] != "Low")
+grid_m.loc[dominant_mask & (grid_m["city_risk"] >= grid_m["airport_risk"]), "density_type"] = "population"
+grid_m.loc[dominant_mask & (grid_m["airport_risk"] > grid_m["city_risk"]), "density_type"] = "airspace"
+
+
 # Totalk risk
 grid_m["risk_cost"] = grid_m["airport_risk"] + grid_m["city_risk"]
 
 # NO-FLY OVERRIDE
 grid_m["risk_class"] = "Low"
 
-# Same thing we did for high risk and medium risk for the airport and cities
+# Same thing we did for high risk and medium risk for no fly zones
 for name, lat, lon, radius in NO_FLY_SITES:
     pt = gpd.GeoSeries([Point(lon, lat)], crs=CRS_LL).to_crs(CRS_M).iloc[0]
     mask = grid_m["centroid"].distance(pt) <= radius
     grid_m.loc[mask, "risk_class"] = "No-Fly"
+    grid_m.loc[mask, "density_type"] = "no-fly"
+    grid_m.loc[mask, "pop_class"] = "Low"
+    grid_m.loc[mask, "air_class"] = "Low"
 
 # FINAL CLASSIFICATION
 grid_m.loc[grid_m["risk_cost"] > 30, "risk_class"] = "Medium"
@@ -134,5 +169,5 @@ grid_m.loc[grid_m["risk_class"] == "No-Fly", "risk_cost"] = 9999
 
 # EXPORT
 grid_ll = grid_m.drop(columns=["centroid"]).to_crs(CRS_LL)
-grid_ll.to_file("risk_grid_v2.geojson", driver="GeoJSON")
-print("Saved: risk_grid_v2.geojson")
+grid_ll.to_file("risk_grid_v3.geojson", driver="GeoJSON")
+print("Saved: risk_grid_v3.geojson")
