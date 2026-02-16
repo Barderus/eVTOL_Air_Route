@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import geopandas as gpd
 from shapely.geometry import box, Point
 
@@ -71,6 +72,37 @@ grid_m["centroid"] = grid_m.geometry.centroid
 cx = grid_m["centroid"].x.to_numpy()
 cy = grid_m["centroid"].y.to_numpy()
 
+# Load + join population density to grid (centroid-in-polygon)
+BG_GEOJSON_PATH = "../population/il_blockgroups_population_density.geojson"
+bg = gpd.read_file(BG_GEOJSON_PATH).to_crs(CRS_M)
+
+# Clip block groups to the study area
+bg = gpd.clip(bg, study_m)
+
+# Build a GeoDataFrame of centroids for spatial join
+centroids = gpd.GeoDataFrame(
+    {"cell_id": np.arange(len(grid_m))},
+    geometry=grid_m["centroid"],
+    crs=CRS_M
+)
+
+# Spatial join
+join = gpd.sjoin(
+    centroids,
+    bg[["density_p_km2", "density_risk", "geometry"]],
+    how="left",
+    predicate="within"
+)
+
+# Attach joined density back to grid (aligned by cell_id)
+join = join.set_index("cell_id").reindex(np.arange(len(grid_m)))
+
+grid_m["density_p_km2"] = join["density_p_km2"].astype(float)
+grid_m["density_risk"] = join["density_risk"].fillna("low")
+
+# Fallbacks (some centroids near boundary may not match due to precision)
+grid_m["density_p_km2"] = grid_m["density_p_km2"].fillna(0.0)
+
 # Airport runnaway corridor model
 # Rotate the runnaway so it's more realistic
 def runway_uv(dx, dy, heading_deg):
@@ -100,33 +132,17 @@ for name, lat, lon, heading, A, L, W in AIRPORT_SITES:
 # Let's make sure the defaulty city risk is 0
 grid_m["city_risk"] = 0.0
 
-# horizontal offset, vertical offset, peak risk, decay scale
-def radial_decay(dx, dy, B, S):
-    d = np.sqrt(dx**2 + dy**2) # Calculate the euclidean distance
-    return B * np.exp(-d/S) # Exponential decay
-
-# Same thing we did previous with the airport, we are doing here
-# Add the risk to each high risk city and add the decay function to it
-for name, lat, lon, B, S in HIGH_CITY_SITES:
-    pt = gpd.GeoSeries([Point(lon, lat)], crs=CRS_LL).to_crs(CRS_M).iloc[0]
-    dx = cx - pt.x
-    dy = cy - pt.y
-    grid_m["city_risk"] += radial_decay(dx, dy, B, S)
-
-# Add the risk to each MEDIUM risk city and add the decay function to it
-for name, lat, lon, B, S in MEDIUM_CITY_SITES:
-    pt = gpd.GeoSeries([Point(lon, lat)], crs=CRS_LL).to_crs(CRS_M).iloc[0]
-    dx = cx - pt.x
-    dy = cy - pt.y
-    grid_m["city_risk"] += radial_decay(dx, dy, B, S)
+# Density scale based on the grid, the lower this number is, the more population density we can see
+DENSITY_SCALE = 15.0
+grid_m["city_risk"] = (grid_m["density_p_km2"] / DENSITY_SCALE).clip(0, 120)
 
 # Separate density classes so we can have different colors
 grid_m["pop_class"] = "Low"
 grid_m["air_class"] = "Low"
 
-# Tune these independently
-POP_MED_TH = 30
-POP_HIGH_TH = 70
+# Thresholds
+POP_MED_TH = 40
+POP_HIGH_TH = 90
 
 AIR_MED_TH = 30
 AIR_HIGH_TH = 70
@@ -167,7 +183,10 @@ grid_m.loc[grid_m["risk_cost"] > 70, "risk_class"] = "High"
 # No-fly overrides everything
 grid_m.loc[grid_m["risk_class"] == "No-Fly", "risk_cost"] = 9999
 
+print("Density stats (grid):")
+print(grid_m["density_risk"].value_counts())
+
 # EXPORT
 grid_ll = grid_m.drop(columns=["centroid"]).to_crs(CRS_LL)
-grid_ll.to_file("risk_grid_v3.geojson", driver="GeoJSON")
-print("Saved: risk_grid_v3.geojson")
+grid_ll.to_file("risk_grid_v4.geojson", driver="GeoJSON")
+print("Saved: risk_grid_v4.geojson")
