@@ -212,15 +212,6 @@ grid_m.loc[grid_m["risk_cost"] > 70, "risk_class"] = "High"
 # No-fly overrides everything
 grid_m.loc[grid_m["risk_class"] == "No-Fly", "risk_cost"] = 9999
 
-# Debug prints
-print("Density stats (grid):")
-print(grid_m["density_risk"].value_counts())
-
-print("Airspace high cells:", int((grid_m["airport_airspace_high"] > 0).sum()))
-print("Airspace med  cells:", int((grid_m["airport_airspace_med"] > 0).sum()))
-print("Combined airport risk stats:")
-print(grid_m["airport_risk_combined"].describe())
-
 # EXPORT
 grid_ll = grid_m.drop(columns=["centroid"]).to_crs(CRS_LL)
 grid_ll.to_file("risk_grid_v5.geojson", driver="GeoJSON")
