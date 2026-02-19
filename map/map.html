@@ -1,213 +1,290 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Chicago Region Map</title>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chicago Region Map</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <link rel="stylesheet"
-          href="https://unpkg.com/leaflet@1.6.0/dist/leaflet.css"
-          integrity="sha512-xwE/Az9zrjBIphAcBb3F6JVqxf46+CDLwfLMHloNu6KEQCAWi6HcDUbeOfBIptF7tcCzusKFjFw2yuvEpDL9wQ=="
-          crossorigin=""/>
+  <link rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.6.0/dist/leaflet.css"
+        integrity="sha512-xwE/Az9zrjBIphAcBb3F6JVqxf46+CDLwfLMHloNu6KEQCAWi6HcDUbeOfBIptF7tcCzusKFjFw2yuvEpDL9wQ=="
+        crossorigin=""/>
 
-    <script src="https://unpkg.com/leaflet@1.6.0/dist/leaflet.js"
-            integrity="sha512-gZwIG9x3wUXg2hdXF6+rVkLF/0Vi9U8D2Ntg4Ga5I5BZpVkVxlJWbSQtXPSiUTtC0TjtGOmxa1AJPuV0CPthew=="
-            crossorigin=""></script>
-    <style>
-        html, body { height: 100%; margin: 0; }
-        #mapid { height: 100vh; width: 100vw; }
-    </style>
+  <script src="https://unpkg.com/leaflet@1.6.0/dist/leaflet.js"
+          integrity="sha512-gZwIG9x3wUXg2hdXF6+rVkLF/0Vi9U8D2Ntg4Ga5I5BZpVkVxlJWbSQtXPSiUTtC0TjtGOmxa1AJPuV0CPthew=="
+          crossorigin=""></script>
+
+  <style>
+    html, body { height: 100%; margin: 0; }
+    #mapid { height: 100vh; width: 100vw; }
+
+    /* Simple toggle buttons */
+    .view-toggle {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 9999;
+      background: white;
+      padding: 8px;
+      border-radius: 6px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      font-family: sans-serif;
+    }
+    .view-toggle button {
+      cursor: pointer;
+      border: 1px solid #ccc;
+      background: #f7f7f7;
+      padding: 6px 10px;
+      border-radius: 4px;
+    }
+    .view-toggle button.active {
+      border-color: #333;
+      background: #eaeaea;
+      font-weight: 600;
+    }
+  </style>
 </head>
 
 <body>
 <div id="mapid"></div>
 
+<!-- Toggle UI -->
+<div class="view-toggle">
+  <button id="btnCombined" class="active">Combined</button>
+  <button id="btnAir">Airspace Only</button>
+  <button id="btnPop">Population Only</button>
+</div>
+
 <script>
-    // Custom Icons
-    var airportIcon = L.icon({
-        iconUrl: "../img/airplane.svg",
-        iconSize: [32, 32],
-        iconAnchor: [16, 32],
-        popupAnchor: [0, -32]
-    });
+  // Custom Icons
+  var airportIcon = L.icon({
+    iconUrl: "../img/airplane.svg",
+    iconSize: [32, 32],
+    iconAnchor: [16, 32],
+    popupAnchor: [0, -32]
+  });
 
-    var labIcon = L.icon({
-        iconUrl: "../img/flask.svg",
-        iconSize: [32, 32],
-        iconAnchor: [16, 32],
-        popupAnchor: [0, -32]
-    });
+  var labIcon = L.icon({
+    iconUrl: "../img/flask.svg",
+    iconSize: [32, 32],
+    iconAnchor: [16, 32],
+    popupAnchor: [0, -32]
+  });
 
-    var startIcon = L.icon({
-        iconUrl: "../img/rocket.svg",
-        iconSize: [28, 28],
-        iconAnchor: [14, 28],
-        popupAnchor: [0, -28]
-    });
+  var startIcon = L.icon({
+    iconUrl: "../img/rocket.svg",
+    iconSize: [28, 28],
+    iconAnchor: [14, 28],
+    popupAnchor: [0, -28]
+  });
 
-    var endIcon = L.icon({
-        iconUrl: "../img/golf.svg",
-        iconSize: [28, 28],
-        iconAnchor: [14, 28],
-        popupAnchor: [0, -28]
-    });
+  var endIcon = L.icon({
+    iconUrl: "../img/golf.svg",
+    iconSize: [28, 28],
+    iconAnchor: [14, 28],
+    popupAnchor: [0, -28]
+  });
 
-    // Set initial framing coord
-    var preferredCenter = [41.72161808379742, -87.62557983398438];
-    var preferredZoom = 11;
+  // Map init
+  var preferredCenter = [41.72161808379742, -87.62557983398438];
+  var preferredZoom = 11;
 
-    var preferredBounds = L.latLngBounds(
-        [41.54427052419964, -88.5], // south, west
-        [42.2, -82]  // north, east
-    );
+  var preferredBounds = L.latLngBounds(
+    [41.54427052419964, -88.5], // south, west
+    [42.2, -82]                 // north, east
+  );
 
-    // IMPORTANT: set center+zoom immediately so Leaflet is "loaded"
-    var mymap = L.map('mapid', {
-        center: preferredCenter,
-        zoom: preferredZoom,
-        maxBounds: preferredBounds,
-        maxBoundsViscosity: 1.0,
-        preferCanvas: true
-    });
+  var mymap = L.map('mapid', {
+    center: preferredCenter,
+    zoom: preferredZoom,
+    maxBounds: preferredBounds,
+    maxBoundsViscosity: 1.0,
+    preferCanvas: true
+  });
 
-    // Basemap
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-        maxZoom: 19,
-        attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
-    }).addTo(mymap);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
+  }).addTo(mymap);
 
-    // Debug logging - get coord on console to find new places
-    mymap.on('moveend', function () {
-        console.log("BOUNDS:", mymap.getBounds().toBBoxString());
-        console.log("CENTER:", mymap.getCenter());
-        console.log("ZOOM:", mymap.getZoom());
-    });
+  mymap.on('moveend', function () {
+    console.log("BOUNDS:", mymap.getBounds().toBBoxString());
+    console.log("CENTER:", mymap.getCenter());
+    console.log("ZOOM:", mymap.getZoom());
+  });
 
-    mymap.on('click', function (e) {
-        console.log("CLICK:", e.latlng.lat, e.latlng.lng);
-    });
+  mymap.on('click', function (e) {
+    console.log("CLICK:", e.latlng.lat, e.latlng.lng);
+  });
 
+  // Reference points + markers
+  var A = [41.695923717435235, -88.12876224517822]; // Clow Airport coord
+  var B = [41.87838051825937, -87.63905525207521];  // Union station coord
 
-    var A = [41.695923717435235, -88.12876224517822]; // Clow Airport coord
-    var B = [41.87838051825937, -87.63905525207521]; // Union station coord
+  L.marker(A, { icon: startIcon }).addTo(mymap).bindPopup("<b>Start (Clow International Airport)</b>");
+  L.marker(B, { icon: endIcon }).addTo(mymap).bindPopup("<b>End (Chicago Loop)</b>");
+  L.polyline([A, B], { weight: 3 }).addTo(mymap).bindPopup("Reference line: A → B");
 
-    // Add them to the map and create an euclidean line connecting them
-    L.marker(A, { icon: startIcon })
-        .addTo(mymap)
-        .bindPopup("<b>Start (Clow International Airport)</b>");
-    L.marker(B, { icon: endIcon })
-        .addTo(mymap)
-        .bindPopup("<b>End (Chicago Loop)</b>");
-    L.polyline([A, B], { weight: 3 }).addTo(mymap).bindPopup("Reference line: A → B");
+  var ohare = [41.97807408541273, -87.90902412382081];
+  var midway = [41.7856116663475, -87.75331135429448];
+  var lewisAirport = [41.60690586957971, -88.09526487573747];
+  var brookeridge = [41.73268507397754, -87.9972105460431];
 
-    // Airport Coordinates for the markers
-    var ohare = [41.97807408541273, -87.90902412382081];
-    var midway = [41.7856116663475, -87.75331135429448];
-    var lewisAirport = [41.60690586957971, -88.09526487573747];
-    var brookeridge = [41.73268507397754, -87.9972105460431];
+  L.marker(ohare, { icon: airportIcon }).addTo(mymap).bindPopup("<b>O'Hare International Airport</b>");
+  L.marker(midway, { icon: airportIcon }).addTo(mymap).bindPopup("<b>Midway International Airport</b>");
+  L.marker(lewisAirport, { icon: airportIcon }).addTo(mymap).bindPopup("<b>Lewis University Airport</b>");
+  L.marker(brookeridge, { icon: airportIcon }).addTo(mymap).bindPopup("<b>Brookeridge Airpark</b>");
 
-    // Add markers for them in the map
-    L.marker(ohare, { icon: airportIcon })
-        .addTo(mymap)
-        .bindPopup("<b>O'Hare International Airport</b>");
+  L.marker([41.7150, -87.9830], { icon: labIcon }).addTo(mymap).bindPopup("<b>Argonne National Lab</b>");
+  L.marker([41.8407, -88.2620], { icon: labIcon }).addTo(mymap).bindPopup("<b>Fermilab</b>");
 
-    L.marker(midway, { icon: airportIcon })
-        .addTo(mymap)
-        .bindPopup("<b>Midway International Airport</b>");
+  // Styling helpers
 
-    L.marker(lewisAirport, { icon: airportIcon })
-        .addTo(mymap)
-        .bindPopup("<b>Lewis University Airport</b>");
-
-    L.marker(brookeridge, { icon: airportIcon })
-        .addTo(mymap)
-        .bindPopup("<b>Brookeridge Airpark</b>");
-
-    // Add argonne and fermilab as no fly zone
-    L.marker([41.7150, -87.9830], { icon: labIcon })
-        .addTo(mymap)
-        .bindPopup("<b>Argonne National Lab</b>");
-
-    L.marker([41.8407, -88.2620], { icon: labIcon })
-        .addTo(mymap)
-        .bindPopup("<b>Fermilab</b>");
-
-    // Optional clicked reference point marker
-    var clicked = [41.843989628462204, -87.9180908203125];
-
-    // Grid Coloring
-function colorByDensity(feature) {
+  // Existing combined logic (your original)
+  function colorCombined(feature) {
     const p = feature.properties || {};
 
-    // no-fly
     if (p.density_type === "no-fly" || p.risk_class === "No-Fly") return "#000000";
 
     const popClass = p.pop_class || "Low";
     const airClass = p.air_class || "Low";
     const type = (p.density_type || "low").toLowerCase();
 
-    // LOW always green
     if (type === "low") return "#2ca25f";
 
-    // POPULATION
     if (type === "population") {
-        if (popClass === "High") return "#08306b";   // dark blue
-        if (popClass === "Medium") return "#6baed6"; // light blue
-        return "#2ca25f";
+      if (popClass === "High") return "#08306b";
+      if (popClass === "Medium") return "#6baed6";
+      return "#2ca25f";
     }
 
-    // AIRSPACE
     if (type === "airspace") {
-        if (airClass === "High") return "#b30000";   // red
-        if (airClass === "Medium") return "#ffd11a"; // yellow
-        return "#2ca25f";
+      if (airClass === "High") return "#b30000";
+      if (airClass === "Medium") return "#ffd11a";
+      return "#2ca25f";
     }
 
     return "#2ca25f";
-}
+  }
 
-function gridStyle(feature) {
-    const c = colorByDensity(feature);
-    return {
+  // Airspace-only coloring: uses ONLY air_class (plus no-fly)
+  function colorAirspaceOnly(feature) {
+    const p = feature.properties || {};
+    if (p.risk_class === "No-Fly") return "#000000";
+
+    const airClass = p.air_class || "Low";
+    if (airClass === "High") return "#b30000";
+    if (airClass === "Medium") return "#ffd11a";
+    return "#2ca25f";
+  }
+
+  // Population-only coloring: uses ONLY pop_class (plus no-fly)
+  function colorPopulationOnly(feature) {
+    const p = feature.properties || {};
+    if (p.risk_class === "No-Fly") return "#000000";
+
+    const popClass = p.pop_class || "Low";
+    if (popClass === "High") return "#08306b";
+    if (popClass === "Medium") return "#6baed6";
+    return "#2ca25f";
+  }
+
+  function makeGridStyle(colorFn) {
+    return function(feature) {
+      const c = colorFn(feature);
+      return {
         color: "#333",
         weight: 1,
         opacity: 0.6,
         fillColor: c,
         fillOpacity: 0.55
+      };
     };
-}
+  }
 
+  // Load Grid GeoJSON once and build 3 toggleable layers
+  let gridLayerCombined = null;
+  let gridLayerAir = null;
+  let gridLayerPop = null;
 
-    // Load Grid GeoJSON
-    out_path = "risk_grid_v5.geojson"
-    fetch(out_path)
-        .then(r => r.json())
-        .then(data => {
-            console.log("Grid features:", data.features.length);
+  const out_path = "risk_grid_v5.geojson";
 
-            L.geoJSON(data, {
-                style: gridStyle,
-                renderer: L.canvas(),
-                onEachFeature: function (feature, layer) {
-                    layer.on('click', function () {
-                        const p = feature.properties || {};
-                        layer.bindPopup(
-                            "<b>cell_id:</b> " + (p.cell_id ?? "n/a") +
-                            "<br><b>risk_class:</b> " + (p.risk_class ?? "n/a") +
-                            "<br><b>risk_cost:</b> " + (p.risk_cost ?? "n/a") +
-                            "<br><b>expandable:</b> " + (p.expandable ?? "n/a")
-                        ).openPopup();
-                    });
-                }
-            }).addTo(mymap);
-        })
-        .catch(err => console.error("Failed to load GeoJSON:", err));
+  fetch(out_path)
+    .then(r => r.json())
+    .then(data => {
+      console.log("Grid features:", data.features.length);
 
-    // Ensure correct sizing if the page loads with layout changes
-    mymap.whenReady(function () {
-        mymap.invalidateSize(true);
-        console.log("FORCED VIEW:", mymap.getCenter(), mymap.getZoom());
-    });
+      // Common click handler
+      function onEachFeature(feature, layer) {
+        layer.on('click', function () {
+          const p = feature.properties || {};
+          layer.bindPopup(
+            "<b>cell_id:</b> " + (p.cell_id ?? "n/a") +
+            "<br><b>risk_class:</b> " + (p.risk_class ?? "n/a") +
+            "<br><b>risk_cost:</b> " + (p.risk_cost ?? "n/a") +
+            "<br><b>expandable:</b> " + (p.expandable ?? "n/a") +
+            "<hr style='margin:6px 0;'/>" +
+            "<b>pop_class:</b> " + (p.pop_class ?? "n/a") +
+            "<br><b>air_class:</b> " + (p.air_class ?? "n/a") +
+            "<br><b>density_type:</b> " + (p.density_type ?? "n/a")
+          ).openPopup();
+        });
+      }
+
+      // Build three layers from the SAME GeoJSON data
+      gridLayerCombined = L.geoJSON(data, {
+        style: makeGridStyle(colorCombined),
+        renderer: L.canvas(),
+        onEachFeature: onEachFeature
+      });
+
+      gridLayerAir = L.geoJSON(data, {
+        style: makeGridStyle(colorAirspaceOnly),
+        renderer: L.canvas(),
+        onEachFeature: onEachFeature
+      });
+
+      gridLayerPop = L.geoJSON(data, {
+        style: makeGridStyle(colorPopulationOnly),
+        renderer: L.canvas(),
+        onEachFeature: onEachFeature
+      });
+
+      // Add default
+      gridLayerCombined.addTo(mymap);
+
+      // Wire buttons
+      const btnCombined = document.getElementById("btnCombined");
+      const btnAir = document.getElementById("btnAir");
+      const btnPop = document.getElementById("btnPop");
+
+      function setActive(activeBtn) {
+        [btnCombined, btnAir, btnPop].forEach(b => b.classList.remove("active"));
+        activeBtn.classList.add("active");
+      }
+
+      function showOnly(layerToShow, activeBtn) {
+        if (gridLayerCombined && mymap.hasLayer(gridLayerCombined)) mymap.removeLayer(gridLayerCombined);
+        if (gridLayerAir && mymap.hasLayer(gridLayerAir)) mymap.removeLayer(gridLayerAir);
+        if (gridLayerPop && mymap.hasLayer(gridLayerPop)) mymap.removeLayer(gridLayerPop);
+
+        layerToShow.addTo(mymap);
+        setActive(activeBtn);
+      }
+
+      btnCombined.onclick = () => showOnly(gridLayerCombined, btnCombined);
+      btnAir.onclick      = () => showOnly(gridLayerAir, btnAir);
+      btnPop.onclick      = () => showOnly(gridLayerPop, btnPop);
+    })
+    .catch(err => console.error("Failed to load GeoJSON:", err));
+
+  mymap.whenReady(function () {
+    mymap.invalidateSize(true);
+    console.log("FORCED VIEW:", mymap.getCenter(), mymap.getZoom());
+  });
 </script>
 </body>
 </html>
