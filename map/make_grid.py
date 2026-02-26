@@ -23,7 +23,7 @@ AIRPORT_SITES = [
     ("Midway", 41.7856116663475,  -87.75331135429448, 130, 100.0, 6000, 2000),
     # ("Clow International Airport", 41.695923717435235, -88.12876224517822, 90, 80.0, 4500, 1500),
     ("Lewis University Airport", 41.60690586957971, -88.09526487573747, 90, 90, 3500, 1500),
-    ("Brookeridge Airpark", 41.73268507397754, -87.9972105460431, 90, 90, 2500, 1500),
+    ("Brookeridge Airpark", 41.73268507397754, -87.9972105460431, 90, 90, 4000, 2000),
 ]
 
 # FAA-based airspace radius (2D widest extent) — for the airspace "stay-away" layer
@@ -39,8 +39,8 @@ AIRSPACE_RADII_M = {
 # NO-FLY ZONES
 # name, lat, lon, radius_m
 NO_FLY_SITES = [
-    ("Argonne National Lab", 41.7150, -87.9830, 2500),
-    ("Fermilab", 41.8407, -88.2620, 2500),
+    ("Argonne National Lab", 41.7150, -87.9830, 3000),
+    ("Fermilab", 41.8407, -88.2620, 3000),
 ]
 
 # Build the grid using geopandas
