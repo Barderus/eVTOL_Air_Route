@@ -1,4 +1,5 @@
 import networkx as nx
+import math
 import matplotlib.pyplot as plt
 
 
@@ -111,10 +112,26 @@ nx.draw(chicago, with_labels=True, font_weight='bold')
 plt.savefig("chicago.png")
 plt.show()
 
+# Harvesine formula allows us to transform our degree coord into miles
 def dist(u, v):
-    (x1, y1) = chicago.nodes[u]["pos"]
-    (x2, y2) = chicago.nodes[v]["pos"]
-    return ((x1 - x2) ** 2 + (y1 - y2) ** 2) ** 0.5
+    lat1, lon1 = chicago.nodes[u]["pos"]
+    lat2, lon2 = chicago.nodes[v]["pos"]
+
+    # Convert degrees → radians
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lon2 - lon1)
+
+    # Haversine formula
+    a = math.sin(dphi / 2) ** 2 + \
+        math.cos(phi1) * math.cos(phi2) * \
+        math.sin(dlambda / 2) ** 2
+
+    c = 2 * math.asin(math.sqrt(a))
+
+    R = 3958.8  # Earth radius in miles
+    return R * c
 
 path = nx.astar_path(chicago, "Bolingbrook", "Chicago", heuristic=dist,  weight="weight")
 
