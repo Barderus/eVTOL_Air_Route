@@ -48,10 +48,17 @@ def heuristic(u, v):
     dy = cent_y[u] - cent_y[v]
     return math.hypot(dx, dy)
 
+ALPHA = 1.0      # weight for distance
+BETA  = 5.0      # weight for risk
+
 for u, v in G.edges():
-    d = centroids_m.iloc[u].distance(centroids_m.iloc[v])  # meters
+    dx = cent_x[u] - cent_x[v]
+    dy = cent_y[u] - cent_y[v]
+    d = math.hypot(dx, dy)
+
     r = 0.5 * (grid.loc[u, "risk_cost"] + grid.loc[v, "risk_cost"])
-    G[u][v]["weight"] = float(d * (1.0 + r))
+
+    G[u][v]["weight"] = ALPHA * d + BETA * r
 
 # Nearest-node lookup
 def node_for_point(lat, lon):
@@ -128,4 +135,17 @@ A* seconds: 0.2662500000005821
 Same path? False
 Dijkstra cost: 3212055.1838673027
 A* cost: 3212055.1838673023
+
+# New performance metrics:
+Nodes: 101286
+Edges: 403235
+Start node: 77708 End node: 87693
+Path nodes: 114
+A* path nodes: 114
+Saved routes.geojson
+Dijkstra seconds: 0.2512913000246044
+A* seconds: 0.04089380000368692
+Same path? True
+Dijkstra cost: 103983.27083941635
+A* cost: 103983.27083941635
 """
