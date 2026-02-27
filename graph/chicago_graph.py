@@ -61,12 +61,25 @@ start_node = node_for_point(start_lat, start_lon)
 end_node   = node_for_point(end_lat, end_lon)
 
 print("Start node:", start_node, "End node:", end_node)
-path = nx.dijkstra_path(G, start_node, end_node, weight="weight")
-print("Path nodes:", len(path))
+dij_path = nx.dijkstra_path(G, start_node, end_node, weight="weight")
+print("Path nodes:", len(dij_path))
+
+# A* algorithm
+def heuristic(u, v):
+    return centroids_m.iloc[u].distance(centroids_m.iloc[v])  # meters
+
+a_path = nx.astar_path(G, start_node, end_node, heuristic=heuristic, weight="weight")
+print("A* path nodes:", len(a_path))
 
 # Export route GeoJSON
-path_line = LineString([grid.loc[n].geometry.centroid for n in path])
-path_gdf = gpd.GeoDataFrame({"name": ["route"]}, geometry=[path_line], crs=grid.crs)
+dij_line = LineString([grid.loc[n].geometry.centroid for n in dij_path])
+a_line   = LineString([grid.loc[n].geometry.centroid for n in a_path])
 
-path_gdf.to_file("route.geojson", driver="GeoJSON")
-print("Saved route.geojson")
+routes = gpd.GeoDataFrame(
+    {"name": ["dijkstra", "astar"]},
+    geometry=[dij_line, a_line],
+    crs=grid.crs
+)
+
+routes.to_file("routes.geojson", driver="GeoJSON")
+print("Saved routes.geojson")
