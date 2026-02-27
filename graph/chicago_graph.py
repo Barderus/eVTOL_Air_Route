@@ -2,6 +2,7 @@ import geopandas as gpd
 import networkx as nx
 from shapely.geometry import Point, LineString
 import time
+import math
 
 
 # Load grid
@@ -38,6 +39,15 @@ print("Edges:", G.number_of_edges())
 grid_m = grid.to_crs("EPSG:3857")
 centroids_m = grid_m.geometry.centroid
 
+# Precompute centroid coordinates (meters)
+cent_x = centroids_m.x.to_numpy()
+cent_y = centroids_m.y.to_numpy()
+
+def heuristic(u, v):
+    dx = cent_x[u] - cent_x[v]
+    dy = cent_y[u] - cent_y[v]
+    return math.hypot(dx, dy)
+
 for u, v in G.edges():
     d = centroids_m.iloc[u].distance(centroids_m.iloc[v])  # meters
     r = 0.5 * (grid.loc[u, "risk_cost"] + grid.loc[v, "risk_cost"])
@@ -67,10 +77,9 @@ dij_path = nx.dijkstra_path(G, start_node, end_node, weight="weight")
 print("Path nodes:", len(dij_path))
 
 # A* algorithm
-def heuristic(u, v):
-    return centroids_m.iloc[u].distance(centroids_m.iloc[v])  # meters
 
-a_path = nx.astar_path(G, start_node, end_node, heuristic=heuristic, weight="weight")
+
+a_path = nx.astar_path(G, start_node, end_node, heuristic=heuristic,weight="weight")
 print("A* path nodes:", len(a_path))
 
 # Export route GeoJSON
@@ -109,6 +118,13 @@ print("A* cost:", path_cost(G, p2))
 Output:
 Dijkstra seconds: 0.26059980000718497
 A* seconds: 0.8576807000063127
+Same path? False
+Dijkstra cost: 3212055.1838673027
+A* cost: 3212055.1838673023
+
+After changing heuristic calculation:
+Dijkstra seconds: 0.28847320000932086
+A* seconds: 0.2662500000005821
 Same path? False
 Dijkstra cost: 3212055.1838673027
 A* cost: 3212055.1838673023
