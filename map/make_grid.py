@@ -33,7 +33,7 @@ AIRSPACE_RADII_M = {
     "O'Hare": (10.0 * NM_TO_M, 15.0 * NM_TO_M),
     "Midway": (5.0 * NM_TO_M, 10.0 * NM_TO_M),
     # Lewis only has one controlled radius in our simplified model
-    "Lewis University Airport": (4.1 * MI_TO_M, 4.1 * MI_TO_M),
+    "Lewis University Airport": (5.1 * MI_TO_M, 5.1 * MI_TO_M),
 }
 
 # NO-FLY ZONES
