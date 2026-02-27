@@ -1,6 +1,8 @@
 import geopandas as gpd
 import networkx as nx
 from shapely.geometry import Point, LineString
+import time
+
 
 # Load grid
 grid = gpd.read_file("../map/risk_grid_v5.geojson")
@@ -83,3 +85,31 @@ routes = gpd.GeoDataFrame(
 
 routes.to_file("routes.geojson", driver="GeoJSON")
 print("Saved routes.geojson")
+
+### PERFORMANCE TEST
+def path_cost(G, path, weight="weight"):
+    return sum(G[path[i]][path[i+1]][weight] for i in range(len(path)-1))
+
+
+t0 = time.perf_counter()
+p1 = nx.dijkstra_path(G, start_node, end_node, weight="weight")
+t1 = time.perf_counter()
+
+t2 = time.perf_counter()
+p2 = nx.astar_path(G, start_node, end_node, heuristic=heuristic, weight="weight")
+t3 = time.perf_counter()
+
+print("Dijkstra seconds:", t1 - t0)
+print("A* seconds:", t3 - t2)
+print("Same path?", p1 == p2)
+print("Dijkstra cost:", path_cost(G, p1))
+print("A* cost:", path_cost(G, p2))
+
+"""
+Output:
+Dijkstra seconds: 0.26059980000718497
+A* seconds: 0.8576807000063127
+Same path? False
+Dijkstra cost: 3212055.1838673027
+A* cost: 3212055.1838673023
+"""
