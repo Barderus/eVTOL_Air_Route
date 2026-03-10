@@ -40,21 +40,26 @@ Routing and algorithm experiments.
 - [`graph/djkstra_test.py`](graph/djkstra_test.py) and [`graph/astart_test.py`](graph/astart_test.py) are smaller routing experiments.
 - [`graph/chicago.png`](graph/chicago.png) is a simple illustrative graph rendering.
 
-### `OpenSky-Trino/`
+### `opensky/`
 
-Traffic-data extraction and 2D map generation.
+Simpler OpenSky workflow for data export and 2D visualizations.
 
-- [`OpenSky-Trino/getData.py`](OpenSky-Trino/getData.py) exports OpenSky data through Trino.
-- [`OpenSky-Trino/query.sql`](OpenSky-Trino/query.sql) is the SQL template used by the exporter.
-- [`OpenSky-Trino/density_map.py`](OpenSky-Trino/density_map.py) renders a static 2D density plot.
-- [`OpenSky-Trino/density_map_leaflet.py`](OpenSky-Trino/density_map_leaflet.py) generates a Leaflet map with density and directional tracks.
+- [`opensky/export_data.py`](opensky/export_data.py) exports OpenSky data through Trino.
+- [`opensky/query.sql`](opensky/query.sql) is the SQL template used by the exporter.
+- [`opensky/make_density_plot.py`](opensky/make_density_plot.py) renders a static 2D density plot.
+- [`opensky/make_leaflet_map.py`](opensky/make_leaflet_map.py) generates a Leaflet map with density and directional tracks.
+- `opensky/output/` stores the generated CSV, PNG, and HTML files.
 
-### `3D_Map/`
+### `traffic_3d/`
 
 Standalone 3D air-traffic density workflow.
 
-- [`3D_Map/generate_3d_density_map.py`](3D_Map/generate_3d_density_map.py) bins OpenSky observations into longitude, latitude, and altitude voxels and generates a browser-based 3D density map.
-- [`3D_Map/ohare_3d_density_map.html`](3D_Map/ohare_3d_density_map.html) is the generated interactive output.
+- [`traffic_3d/make_3d_density_map.py`](traffic_3d/make_3d_density_map.py) bins OpenSky observations into longitude, latitude, and altitude boxes and generates a browser-based 3D density map.
+- `traffic_3d/output/` stores the generated interactive HTML output.
+
+### Legacy wrapper folders
+
+- `OpenSky-Trino/` and `3D_Map/` still exist as thin wrappers so older commands keep working.
 
 ## Main workflows
 
@@ -83,41 +88,43 @@ Set your username first:
 
 ```powershell
 $env:TRINO_USER = "your_username"
-python OpenSky-Trino\getData.py --date 2019-03-09
+python opensky\export_data.py --date 2019-03-09
 ```
+
+The older `OpenSky-Trino\getData.py` and `OpenSky-Trino\export_opensky_data.py` scripts still work, but the new `opensky\` scripts are the clearer entry points.
 
 ### 4. Generate 2D traffic-density outputs
 
 Static density image:
 
 ```powershell
-python OpenSky-Trino\density_map.py
+python opensky\make_density_plot.py
 ```
 
 Interactive Leaflet density map:
 
 ```powershell
-python OpenSky-Trino\density_map_leaflet.py
+python opensky\make_leaflet_map.py
 python -m http.server 8080
 ```
 
 Open:
 
 ```text
-http://localhost:8080/OpenSky-Trino/ohare_density_leaflet.html
+http://localhost:8080/opensky/output/ohare_density_leaflet.html
 ```
 
 ### 5. Generate the 3D traffic-density map
 
 ```powershell
-python 3D_Map\generate_3d_density_map.py
+python traffic_3d\make_3d_density_map.py
 python -m http.server 8080
 ```
 
 Open:
 
 ```text
-http://localhost:8080/3D_Map/ohare_3d_density_map.html
+http://localhost:8080/traffic_3d/output/ohare_3d_density_map.html
 ```
 
 The 3D view currently supports:
@@ -144,4 +151,5 @@ Some workflows also depend on:
 
 - Large GeoJSON files and generated visual outputs can be expensive to commit and diff.
 - The Trino exporter does not hard-code a username; use `--user` or `TRINO_USER`.
+- Generated OpenSky and 3D files now go into `output` folders so the source code stays easier to browse.
 - Review binary assets separately for metadata before publishing the repository publicly.
