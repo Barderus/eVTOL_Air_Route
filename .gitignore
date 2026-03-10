@@ -1,0 +1,9 @@
+.idea/
+.venv/
+__pycache__/
+*.pyc
+
+OpenSky-Trino/*.csv
+OpenSky-Trino/*.png
+OpenSky-Trino/*.html
+3D_Map/*.html
