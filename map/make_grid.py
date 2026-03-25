@@ -14,7 +14,9 @@ NM_TO_M = 1852.0
 MI_TO_M = 1609.344
 
 # Bounds coords
-WEST, SOUTH, EAST, NORTH = -88.89589344859755, 41.104190944576466, -87.52534901500378, 42.21224516288584
+# West bound from 41°45′50″N 88°17′24″W
+# North bound from 42°07′25″N 87°55′15″W
+WEST, SOUTH, EAST, NORTH = -88.29, 41.104190944576466, -87.52534901500378, 42.12361111111111
 
 # Airports
 # name, lat, lon, heading_deg, A (peak risk), L_m (Length), W_m (Width)
