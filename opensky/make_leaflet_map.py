@@ -9,6 +9,8 @@ import pandas as pd
 
 OHARE_LAT = 41.97807408541273
 OHARE_LON = -87.90902412382081
+MIDWAY_LAT = 41.7856116663475
+MIDWAY_LON = -87.75331135429448
 TIME_WINDOWS = [1, 3, 6, 9, 12, 24]
 
 
@@ -17,7 +19,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>O'Hare Flight Density</title>
+  <title>Greater Chicago Flight Density</title>
   <link
     rel="stylesheet"
     href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -97,8 +99,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 <body>
   <div id="map"></div>
   <div class="panel">
-    <h1>O'Hare Flight Density</h1>
-    <p>{summary}</p>
+    <h1>Greater Chicago Flight Density</h1>
     <div class="metric">Rows: {row_count}</div>
     <div class="metric">Flights: {flight_count}</div>
     <div class="metric">Track stride: {track_stride}</div>
@@ -232,14 +233,24 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       fillOpacity: 0.95
     }}).bindPopup("<b>O'Hare International Airport</b>");
 
+    const midway = L.circleMarker([{midway_lat}, {midway_lon}], {{
+      radius: 7,
+      color: "#111827",
+      weight: 2,
+      fillColor: "#22c55e",
+      fillOpacity: 0.95
+    }}).bindPopup("<b>Midway International Airport</b>");
+
     heatLayer.addTo(map);
     trackLayer.addTo(map);
     ohare.addTo(map);
+    midway.addTo(map);
 
     L.control.layers(null, {{
       "Density Heatmap": heatLayer,
       "Flight Tracks": trackLayer,
-      "O'Hare": ohare
+      "O'Hare": ohare,
+      "Midway": midway
     }}, {{
       collapsed: false
     }}).addTo(map);
@@ -305,7 +316,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "csv_path",
         nargs="?",
-        default=folder / "output" / "ohare_2019-03-09_local_30s_15nm_bbox_1.csv",
+        default=folder / "output" / "ohare_2019-03-09_local_1s_15nm_bbox.csv",
         type=Path,
         help="CSV file to read.",
     )
@@ -331,14 +342,7 @@ def main() -> None:
     sampled_data = data[data.groupby("icao24").cumcount() % track_stride == 0].reset_index(drop=True)
     windowed_observations = build_windowed_observations(sampled_data)
 
-    summary = (
-        f"Heat points use all sampled observations. "
-        f"Tracks are grouped by ICAO24, downsampled every {track_stride} points, "
-        f"and drawn with arrowheads to show direction."
-    )
-
     html = HTML_TEMPLATE.format(
-        summary=summary,
         row_count=len(data),
         flight_count=data["icao24"].nunique(),
         track_stride=track_stride,
@@ -354,6 +358,8 @@ def main() -> None:
         arrow_repeat=arrow_repeat,
         ohare_lat=OHARE_LAT,
         ohare_lon=OHARE_LON,
+        midway_lat=MIDWAY_LAT,
+        midway_lon=MIDWAY_LON,
     )
     args.output.write_text(html, encoding="utf-8")
 
