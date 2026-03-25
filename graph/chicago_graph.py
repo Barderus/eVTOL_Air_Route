@@ -3,6 +3,7 @@ import networkx as nx
 from shapely.geometry import Point, LineString
 import time
 import math
+import numpy as np
 
 
 # Load grid
@@ -16,6 +17,8 @@ for i, row in grid.iterrows():
     G.add_node(
         i,
         risk_cost=float(row["risk_cost"]),
+        city_risk=float(row["city_risk"]),
+        airport_risk_combined=float(row["airport_risk_combined"]),
         risk_class=row["risk_class"],
         geometry=row.geometry
     )
@@ -42,23 +45,55 @@ centroids_m = grid_m.geometry.centroid
 # Precompute centroid coordinates (meters)
 cent_x = centroids_m.x.to_numpy()
 cent_y = centroids_m.y.to_numpy()
+city_risk = grid["city_risk"].to_numpy(dtype=float)
+airspace_risk = grid["airport_risk_combined"].to_numpy(dtype=float)
+
+
+def normalize(values):
+    maximum = float(np.max(values))
+    if maximum <= 0:
+        return np.zeros_like(values, dtype=float), 1.0
+    return values / maximum, maximum
+
+
+city_risk_norm, city_risk_max = normalize(city_risk)
+airspace_risk_norm, airspace_risk_max = normalize(airspace_risk)
 
 def heuristic(u, v):
     dx = cent_x[u] - cent_x[v]
     dy = cent_y[u] - cent_y[v]
-    return math.hypot(dx, dy)
+    return DISTANCE_WEIGHT * (math.hypot(dx, dy) / max_edge_distance)
 
-ALPHA = 1.0      # weight for distance
-BETA  = 5.0      # weight for risk
+DISTANCE_WEIGHT = 1.0
+POPULATION_WEIGHT = 1.0
+AIRSPACE_WEIGHT = 1.0
+
+neighbor_distances = []
+for u, v in G.edges():
+    dx = cent_x[u] - cent_x[v]
+    dy = cent_y[u] - cent_y[v]
+    neighbor_distances.append(math.hypot(dx, dy))
+
+max_edge_distance = max(neighbor_distances)
 
 for u, v in G.edges():
     dx = cent_x[u] - cent_x[v]
     dy = cent_y[u] - cent_y[v]
     d = math.hypot(dx, dy)
+    distance_norm = d / max_edge_distance
+    population_norm = 0.5 * (city_risk_norm[u] + city_risk_norm[v])
+    airspace_norm = 0.5 * (airspace_risk_norm[u] + airspace_risk_norm[v])
 
-    r = 0.5 * (grid.loc[u, "risk_cost"] + grid.loc[v, "risk_cost"])
+    G[u][v]["weight"] = (
+        DISTANCE_WEIGHT * distance_norm
+        + POPULATION_WEIGHT * population_norm
+        + AIRSPACE_WEIGHT * airspace_norm
+    )
 
-    G[u][v]["weight"] = ALPHA * d + BETA * r
+print("Normalization maxima:")
+print("  distance max edge (m):", max_edge_distance)
+print("  city_risk max:", city_risk_max)
+print("  airport_risk_combined max:", airspace_risk_max)
 
 # Nearest-node lookup
 def node_for_point(lat, lon):
@@ -145,4 +180,21 @@ A* seconds: 0.04089380000368692
 Same path? True
 Dijkstra cost: 103983.27083941635
 A* cost: 103983.27083941635
+
+After normalization:
+Nodes: 101286
+Edges: 403235
+Normalization maxima:
+  distance max edge (m): 707.1067811911573
+  city_risk max: 120.0
+  airport_risk_combined max: 186.6979748846326
+Start node: 77708 End node: 87693
+Path nodes: 114
+A* path nodes: 114
+Saved routes.geojson
+Dijkstra seconds: 0.2288434000001871
+A* seconds: 0.036822400000346533
+Same path? True
+Dijkstra cost: 147.42153282431707
+A* cost: 147.42153282431707
 """
