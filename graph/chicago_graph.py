@@ -84,8 +84,6 @@ dij_path = nx.dijkstra_path(G, start_node, end_node, weight="weight")
 print("Path nodes:", len(dij_path))
 
 # A* algorithm
-
-
 a_path = nx.astar_path(G, start_node, end_node, heuristic=heuristic,weight="weight")
 print("A* path nodes:", len(a_path))
 
@@ -142,7 +140,6 @@ Edges: 403235
 Start node: 77708 End node: 87693
 Path nodes: 114
 A* path nodes: 114
-Saved routes.geojson
 Dijkstra seconds: 0.2512913000246044
 A* seconds: 0.04089380000368692
 Same path? True
