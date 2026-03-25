@@ -9,6 +9,8 @@ import pandas as pd
 
 OHARE_LON = -87.90902412382081
 OHARE_LAT = 41.97807408541273
+MIDWAY_LON = -87.75331135429448
+MIDWAY_LAT = 41.7856116663475
 
 
 def detect_csv_encoding(csv_path: Path) -> str:
@@ -62,6 +64,7 @@ def main() -> None:
     histogram = axis.hist2d(data["lon"], data["lat"], bins=args.bins, cmap="hot")
 
     axis.scatter(OHARE_LON, OHARE_LAT, color="cyan", edgecolors="black", linewidths=0.8, s=60, label="O'Hare")
+    axis.scatter(MIDWAY_LON, MIDWAY_LAT, color="orange", edgecolors="black", linewidths=0.8, s=60, label="Midway")
     axis.set_xlabel("Longitude")
     axis.set_ylabel("Latitude")
     axis.set_title("OpenSky 2D Density Map Around O'Hare")
