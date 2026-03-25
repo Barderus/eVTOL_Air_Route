@@ -1,67 +1,47 @@
-# EVOTL-MAP
+# eVTOL Air Route
 
-EVOTL-MAP is a research-oriented project for modeling low-altitude airspace around Chicago with a focus on eVTOL and UAM routing. The repository combines population density, airport airspace constraints, OpenSky traffic observations, and graph-based path planning in one workspace.
+`eVTOL Air Route` is a research-oriented Python project for modeling low-altitude airspace around Chicago for eVTOL and urban air mobility routing. It combines three inputs:
 
-![Chicago routing graph](graph/chicago.png)
+- population density
+- airport-related airspace risk
+- observed aircraft traffic from OpenSky
 
-## What the project does
+The repository is organized as a script-driven workflow that:
 
-- Builds geospatial risk grids over the Chicago region.
-- Combines population density with airport-related airspace risk.
-- Uses OpenSky state vectors to visualize observed aircraft traffic near O'Hare.
-- Experiments with Dijkstra and A* routing over a risk-weighted grid.
+- builds a population-density layer
+- generates a risk-weighted Chicago grid
+- runs graph-based routing experiments
+- exports historical traffic data near O'Hare through Trino
+- renders 2D and 3D traffic-density visualizations
 
-## Repository layout
+## Requirements
 
-### `map/`
+- Python `>=3.12,<3.15`
+- PowerShell examples assume Windows
+- Java installed if you want to export OpenSky data through Trino
+- A local Trino CLI JAR if you want to query OpenSky
 
-Core geospatial risk-map workflow.
+Install dependencies with either `uv` or `pip`:
 
-- [`map/make_grid.py`](map/make_grid.py) builds the study grid and assigns:
-  - population-derived risk
-  - airport corridor risk
-  - circular airport airspace risk
-  - no-fly overrides
-- [`map/map.html`](map/map.html) renders the risk grid in Leaflet.
-- `risk_grid_*.geojson` files are generated grid variants.
+```powershell
+uv sync
+```
 
-### `population/`
+or
 
-Population processing workflow.
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
 
-- [`population/population_calculation.py`](population/population_calculation.py) joins Illinois block group geometry with population estimates and produces density classes for mapping.
-- `il_blockgroups_population_density.geojson` is the processed density layer used by the map workflow.
+If you plan to generate OpenSky outputs, create the output folders once:
 
-### `graph/`
+```powershell
+New-Item -ItemType Directory -Force opensky\output, traffic_3d\output
+```
 
-Routing and algorithm experiments.
-
-- [`graph/chicago_graph.py`](graph/chicago_graph.py) converts the risk grid into a graph and compares Dijkstra vs A* over the Chicago study area.
-- [`graph/djkstra_test.py`](graph/djkstra_test.py) and [`graph/astart_test.py`](graph/astart_test.py) are smaller routing experiments.
-- [`graph/chicago.png`](graph/chicago.png) is a simple illustrative graph rendering.
-
-### `opensky/`
-
-Simpler OpenSky workflow for data export and 2D visualizations.
-
-- [`opensky/export_data.py`](opensky/export_data.py) exports OpenSky data through Trino.
-- [`opensky/query.sql`](opensky/query.sql) is the SQL template used by the exporter.
-- [`opensky/make_density_plot.py`](opensky/make_density_plot.py) renders a static 2D density plot.
-- [`opensky/make_leaflet_map.py`](opensky/make_leaflet_map.py) generates a Leaflet map with density and directional tracks.
-- `opensky/output/` stores the generated CSV, PNG, and HTML files.
-
-### `traffic_3d/`
-
-Standalone 3D air-traffic density workflow.
-
-- [`traffic_3d/make_3d_density_map.py`](traffic_3d/make_3d_density_map.py) bins OpenSky observations into longitude, latitude, and altitude boxes and generates a browser-based 3D density map.
-- `traffic_3d/output/` stores the generated interactive HTML output.
-
-### Legacy wrapper folders
-
-- `OpenSky-Trino/` and `3D_Map/` still exist as thin wrappers so older commands keep working.
-
-## Main workflows
+## How To Run
 
 ### 1. Build the population layer
 
@@ -69,10 +49,23 @@ Standalone 3D air-traffic density workflow.
 python population\population_calculation.py
 ```
 
+Output:
+
+- `population\il_blockgroups_population_density.geojson`
+
 ### 2. Build the Chicago risk grid
 
 ```powershell
 python map\make_grid.py
+```
+
+Output:
+
+- `map\risk_grid_v5.geojson`
+
+To view the risk map:
+
+```powershell
 python -m http.server 8080
 ```
 
@@ -82,29 +75,52 @@ Open:
 http://localhost:8080/map/map.html
 ```
 
-### 3. Export OpenSky traffic data through Trino
+### 3. Run the routing experiment
 
-Set your username first:
+```powershell
+python graph\chicago_graph.py
+```
+
+Output:
+
+- `graph\routes.geojson`
+
+### 4. Export OpenSky traffic data through Trino
+
+Set your username:
 
 ```powershell
 $env:TRINO_USER = "your_username"
+```
+
+Run the exporter:
+
+```powershell
 python opensky\export_data.py --date 2019-03-09
 ```
 
-The older `OpenSky-Trino\getData.py` and `OpenSky-Trino\export_opensky_data.py` scripts still work, but the new `opensky\` scripts are the clearer entry points.
+Default output:
 
-### 4. Generate 2D traffic-density outputs
+- `opensky\output\ohare_2019-03-09_local_1s_15nm_bbox.csv`
+
+The script accepts either a direct JAR path or a folder containing the Trino CLI JAR. If your local setup is elsewhere, pass it explicitly:
+
+```powershell
+python opensky\export_data.py --date 2019-03-09 --trino-path C:\tools\trino-cli.jar
+```
+
+### 5. Generate the 2D traffic visualizations
 
 Static density image:
 
 ```powershell
-python opensky\make_density_plot.py
+python opensky\make_density_plot.py opensky\output\ohare_2019-03-09_local_1s_15nm_bbox.csv
 ```
 
-Interactive Leaflet density map:
+Interactive Leaflet map:
 
 ```powershell
-python opensky\make_leaflet_map.py
+python opensky\make_leaflet_map.py opensky\output\ohare_2019-03-09_local_1s_15nm_bbox.csv
 python -m http.server 8080
 ```
 
@@ -114,10 +130,10 @@ Open:
 http://localhost:8080/opensky/output/ohare_density_leaflet.html
 ```
 
-### 5. Generate the 3D traffic-density map
+### 6. Generate the 3D traffic-density map
 
 ```powershell
-python traffic_3d\make_3d_density_map.py
+python traffic_3d\make_3d_density_map.py opensky\output\ohare_2019-03-09_local_1s_15nm_bbox.csv
 python -m http.server 8080
 ```
 
@@ -127,29 +143,8 @@ Open:
 http://localhost:8080/traffic_3d/output/ohare_3d_density_map.html
 ```
 
-The 3D view currently supports:
-
-- cumulative hour toggles: `1h`, `3h`, `6h`, `9h`, `12h`, `24h`
-- altitude ceiling filtering
-- voxelized traffic-density rendering around O'Hare
-
-## Environment
-
-The project targets Python 3.12. Current workflows use:
-
-- `pandas`
-- `matplotlib`
-- `geopandas`
-- `networkx`
-
-Some workflows also depend on:
-
-- a local Trino CLI installation for OpenSky queries
-- a local HTTP server for viewing generated HTML maps
-
 ## Notes
 
-- Large GeoJSON files and generated visual outputs can be expensive to commit and diff.
-- The Trino exporter does not hard-code a username; use `--user` or `TRINO_USER`.
-- Generated OpenSky and 3D files now go into `output` folders so the source code stays easier to browse.
-- Review binary assets separately for metadata before publishing the repository publicly.
+- `graph\chicago_graph.py` expects `map\risk_grid_v5.geojson` to exist first.
+- The OpenSky visualization scripts expect CSV columns consistent with [`opensky/query.sql`](opensky/query.sql).
+- Legacy wrapper folders such as `OpenSky-Trino\` and `3D_Map\` still exist for older command compatibility.
