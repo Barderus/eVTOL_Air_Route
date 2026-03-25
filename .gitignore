@@ -1,0 +1,11 @@
+.idea/
+.venv/
+__pycache__/
+*.pyc
+
+opensky/output/
+traffic_3d/output/
+OpenSky-Trino/*.csv
+OpenSky-Trino/*.png
+OpenSky-Trino/*.html
+3D_Map/*.html
