@@ -9,6 +9,8 @@ import pandas as pd
 
 OHARE_LAT = 41.97807408541273
 OHARE_LON = -87.90902412382081
+MIDWAY_LAT = 41.7856116663475
+MIDWAY_LON = -87.75331135429448
 TIME_WINDOWS = [1, 3, 6, 9, 12, 24]
 
 
@@ -124,7 +126,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   <script>
     const densityData = {density_data};
     const timeButtons = {time_buttons};
-    const airportPoint = [{ohare_lon}, {ohare_lat}, 0];
+    const airportPoints = [
+      {{ position: [{ohare_lon}, {ohare_lat}, 0], color: [34, 197, 94, 255], radius: 500 }},
+      {{ position: [{midway_lon}, {midway_lat}, 0], color: [245, 158, 11, 255], radius: 500 }}
+    ];
     const altitudeSlider = document.getElementById("altitudeRange");
     const altitudeValue = document.getElementById("altitudeValue");
     const timeToggle = document.getElementById("timeToggle");
@@ -186,11 +191,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
       const airportLayer = new deck.ScatterplotLayer({{
         id: "airport-point",
-        data: [{{ position: airportPoint }}],
+        data: airportPoints,
         radiusUnits: "meters",
         getPosition: (row) => row.position,
-        getRadius: 500,
-        getFillColor: [34, 197, 94, 255],
+        getRadius: (row) => row.radius,
+        getFillColor: (row) => row.color,
         getLineColor: [15, 23, 42, 255],
         lineWidthMinPixels: 2
       }});
@@ -369,6 +374,8 @@ def main() -> None:
         "time_buttons": json.dumps(TIME_WINDOWS),
         "ohare_lon": OHARE_LON,
         "ohare_lat": OHARE_LAT,
+        "midway_lon": MIDWAY_LON,
+        "midway_lat": MIDWAY_LAT,
     }
     html = HTML_TEMPLATE
     for key, value in replacements.items():
