@@ -9,6 +9,7 @@ import pandas as pd
 
 OHARE_LAT = 41.97807408541273
 OHARE_LON = -87.90902412382081
+TIME_WINDOWS = [1, 3, 6, 9, 12, 24]
 
 
 HTML_TEMPLATE = """<!DOCTYPE html>
@@ -109,11 +110,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   <script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
   <script src="https://unpkg.com/leaflet-polylinedecorator@1.6.0/dist/leaflet.polylineDecorator.js"></script>
   <script>
-    const observations = {observation_data};
+    const windowedObservations = {observation_data};
     const bounds = {bounds};
-    const timeButtons = [1, 3, 6, 9, 12, 24];
-    const startTime = {start_epoch};
-    const endTime = {end_epoch};
+    const timeButtons = {time_buttons};
 
     const map = L.map("map", {{
       preferCanvas: true,
@@ -152,8 +151,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     }}
 
     function drawForHours(hours) {{
-      const cutoff = Math.min(endTime, startTime + hours * 3600);
-      const rows = observations.filter((row) => row.time < cutoff);
+      const rows = windowedObservations[String(hours)] || [];
       const heatPoints = rows.map((row) => [row.lat, row.lon, 1.0]);
       heatLayer.setLatLngs(heatPoints);
 
@@ -246,8 +244,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       collapsed: false
     }}).addTo(map);
 
-    drawForHours(24);
-    setActiveButton(24);
+    drawForHours(1);
+    setActiveButton(1);
   </script>
 </body>
 </html>
@@ -267,12 +265,20 @@ def detect_csv_encoding(csv_path: Path) -> str:
 
 def load_flight_data(csv_path: Path) -> pd.DataFrame:
     data = pd.read_csv(csv_path, encoding=detect_csv_encoding(csv_path))
+    if data.empty:
+        raise SystemExit(
+            f"No rows found in {csv_path}. The export only contains headers, so there is nothing to plot."
+        )
     data = data.dropna(subset=["time", "lat", "lon", "baroaltitude", "icao24"]).copy()
     data["time"] = pd.to_numeric(data["time"], errors="coerce")
     data["lat"] = pd.to_numeric(data["lat"], errors="coerce")
     data["lon"] = pd.to_numeric(data["lon"], errors="coerce")
     data["baroaltitude"] = pd.to_numeric(data["baroaltitude"], errors="coerce")
     data = data.dropna(subset=["time", "lat", "lon", "baroaltitude"])
+    if data.empty:
+        raise SystemExit(
+            f"No plottable rows found in {csv_path}. Check that the export returned valid time, position, and altitude values."
+        )
     data["time"] = data["time"].astype(int)
     data["lat"] = data["lat"].astype(float)
     data["lon"] = data["lon"].astype(float)
@@ -281,13 +287,25 @@ def load_flight_data(csv_path: Path) -> pd.DataFrame:
     return data
 
 
+def build_windowed_observations(data: pd.DataFrame) -> dict[str, list[dict[str, int | float | str]]]:
+    start_epoch = int(data["time"].min())
+    windowed: dict[str, list[dict[str, int | float | str]]] = {}
+
+    for hours in TIME_WINDOWS:
+        cutoff = start_epoch + hours * 3600
+        rows = data[data["time"] < cutoff][["time", "lat", "lon", "baroaltitude", "icao24"]]
+        windowed[str(hours)] = rows.to_dict(orient="records")
+
+    return windowed
+
+
 def parse_args() -> argparse.Namespace:
     folder = Path(__file__).resolve().parent
     parser = argparse.ArgumentParser(description="Create a Leaflet map from an OpenSky CSV file.")
     parser.add_argument(
         "csv_path",
         nargs="?",
-        default=folder / "output" / "ohare_2019-03-09_local_1min_15nm_bbox.csv",
+        default=folder / "output" / "ohare_2019-03-09_local_30s_15nm_bbox_1.csv",
         type=Path,
         help="CSV file to read.",
     )
@@ -311,7 +329,7 @@ def main() -> None:
     arrow_repeat = max(40, args.arrow_stride * 12)
 
     sampled_data = data[data.groupby("icao24").cumcount() % track_stride == 0].reset_index(drop=True)
-    observation_rows = sampled_data[["time", "lat", "lon", "baroaltitude", "icao24"]].to_dict(orient="records")
+    windowed_observations = build_windowed_observations(sampled_data)
 
     summary = (
         f"Heat points use all sampled observations. "
@@ -325,7 +343,8 @@ def main() -> None:
         flight_count=data["icao24"].nunique(),
         track_stride=track_stride,
         arrow_stride=args.arrow_stride,
-        observation_data=json.dumps(observation_rows),
+        observation_data=json.dumps(windowed_observations),
+        time_buttons=json.dumps(TIME_WINDOWS),
         bounds=json.dumps(
             [
                 [float(data["lat"].min()), float(data["lon"].min())],
@@ -335,8 +354,6 @@ def main() -> None:
         arrow_repeat=arrow_repeat,
         ohare_lat=OHARE_LAT,
         ohare_lon=OHARE_LON,
-        start_epoch=int(data["time"].min()),
-        end_epoch=int(data["time"].max()) + 1,
     )
     args.output.write_text(html, encoding="utf-8")
 
