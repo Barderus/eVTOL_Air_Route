@@ -641,7 +641,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "csv_path",
         nargs="?",
-        default=folder.parent / "opensky" / "output" / "ohare_2019-03-09_local_30s_15nm_bbox.csv",
+        default=folder.parent / "opensky" / "output" / "ohare_2019-03-09_local_15s_15nm_bbox.csv",
         type=Path,
         help="CSV file to read.",
     )
