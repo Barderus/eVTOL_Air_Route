@@ -213,6 +213,7 @@
   const out_path = "risk_grid_v5.geojson";
 
   fetch(out_path)
+
     .then(r => r.json())
     .then(data => {
       console.log("Grid features:", data.features.length);
