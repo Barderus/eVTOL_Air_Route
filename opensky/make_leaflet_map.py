@@ -142,6 +142,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     }});
 
     const trackLayer = L.layerGroup();
+    const originLayer = L.layerGroup();
     const timeToggle = document.getElementById("timeToggle");
 
     function pickTrackColor(meanAltitude) {{
@@ -157,6 +158,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       heatLayer.setLatLngs(heatPoints);
 
       trackLayer.clearLayers();
+      originLayer.clearLayers();
       const flightMap = new Map();
 
       rows.forEach((row) => {{
@@ -173,6 +175,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
         flightRows.sort((a, b) => a.time - b.time);
         const points = flightRows.map((row) => [row.lat, row.lon]);
+        const firstRow = flightRows[0];
         const meanAltitude = flightRows.reduce((total, row) => total + row.baroaltitude, 0) / flightRows.length;
         const color = pickTrackColor(meanAltitude);
 
@@ -202,8 +205,22 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           }}]
         }});
 
+        const origin = L.circleMarker([firstRow.lat, firstRow.lon], {{
+          radius: 5,
+          color: "#111827",
+          weight: 1.5,
+          fillColor: "#000000",
+          fillOpacity: 0.95
+        }}).bindPopup(
+          `<b>Origin point</b><br>` +
+          `<b>ICAO24:</b> ${{icao24}}<br>` +
+          `<b>First sample:</b> ${{new Date(firstRow.time * 1000).toISOString()}}<br>` +
+          `<b>Altitude:</b> ${{firstRow.baroaltitude.toFixed(0)}} m`
+        );
+
         line.addTo(trackLayer);
         arrows.addTo(trackLayer);
+        origin.addTo(originLayer);
       }});
     }}
 
@@ -243,12 +260,14 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
     heatLayer.addTo(map);
     trackLayer.addTo(map);
+    originLayer.addTo(map);
     ohare.addTo(map);
     midway.addTo(map);
 
     L.control.layers(null, {{
       "Density Heatmap": heatLayer,
       "Flight Tracks": trackLayer,
+      "Flight Origins": originLayer,
       "O'Hare": ohare,
       "Midway": midway
     }}, {{
@@ -316,7 +335,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "csv_path",
         nargs="?",
-        default=folder / "output" / "ohare_2019-03-09_local_1s_15nm_bbox.csv",
+        default=folder / "output" / "ohare_2019-03-09_local_30s_15nm_bbox.csv",
         type=Path,
         help="CSV file to read.",
     )
