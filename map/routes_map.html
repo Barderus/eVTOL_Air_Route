@@ -2,10 +2,9 @@
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>Route Preview (Dijkstra vs A*)</title>
+  <title>Route Preview</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <!-- Leaflet CSS -->
   <link
     rel="stylesheet"
     href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -17,7 +16,6 @@
     html, body { height: 100%; margin: 0; }
     #map { height: 100%; width: 100%; }
 
-    /* Simple legend styling */
     .legend-box {
       background: white;
       padding: 10px 12px;
@@ -34,18 +32,11 @@
       border-top: 4px solid #000;
       display: inline-block;
     }
-    .swatch-dash {
-      width: 34px;
-      height: 0;
-      border-top: 4px dashed #000;
-      display: inline-block;
-    }
   </style>
 </head>
 <body>
   <div id="map"></div>
 
-  <!-- Leaflet JS -->
   <script
     src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
     integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
@@ -53,80 +44,92 @@
   ></script>
 
   <script>
-    // 1) Create map (Chicago-ish default view)
     const map = L.map("map").setView([41.88, -87.63], 10);
 
-    // 2) Base tiles
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
       attribution: "&copy; OpenStreetMap contributors"
     }).addTo(map);
 
-    // 3) Load routes GeoJSON (contains two features: dijkstra + astar)
+    const routeStyles = {
+      combined: { color: "#111827", weight: 7, opacity: 0.95 },
+      population_only: { color: "#16a34a", weight: 6, opacity: 0.9, dashArray: "10 6" },
+      distance_only: { color: "#2563eb", weight: 6, opacity: 0.9 },
+      airspace_only: { color: "#dc2626", weight: 6, opacity: 0.9, dashArray: "4 8" }
+    };
+
+    const routeLabels = {
+      combined: "Combined Cost",
+      population_only: "Population Only",
+      distance_only: "Distance Only",
+      airspace_only: "Airspace Only"
+    };
+
     fetch("../graph/routes.geojson")
       .then(r => {
         if (!r.ok) throw new Error("Failed to load routes.geojson");
         return r.json();
       })
       .then(data => {
+        const overlayLayers = {};
+        const allBounds = L.latLngBounds([]);
 
-        const routeLayer = L.geoJSON(data, {
-          style: function (feature) {
-            const name = (feature.properties && feature.properties.name) ? feature.properties.name : "";
-
-            if (name === "dijkstra") {
-              return {
-                color: "#1f77b4", // blue
-                weight: 6,
-                opacity: 0.9
-              };
+        data.features.forEach(feature => {
+          const p = feature.properties || {};
+          const name = p.name || "route";
+          const label = p.label || routeLabels[name] || name;
+          const layer = L.geoJSON(feature, {
+            style: function () {
+              return routeStyles[name] || { color: "black", weight: 5, opacity: 0.9 };
+            },
+            onEachFeature: function (_feature, featureLayer) {
+              const totalCost = typeof p.total_cost === "number" ? p.total_cost.toFixed(3) : "n/a";
+              const pathNodes = p.path_nodes ?? "n/a";
+              featureLayer.bindPopup(
+                `<b>${label}</b><br>` +
+                `Cost: ${totalCost}<br>` +
+                `Nodes: ${pathNodes}<br>` +
+                `Weights: D=${p.distance_weight}, P=${p.population_weight}, A=${p.airspace_weight}`
+              );
             }
+          });
 
-            if (name === "astar") {
-              return {
-                color: "#d62728", // red
-                weight: 6,
-                opacity: 0.9,
-                dashArray: "8 6"  // dashed
-              };
-            }
+          overlayLayers[label] = layer;
+          layer.addTo(map);
+          allBounds.extend(layer.getBounds());
+        });
 
-            // fallback
-            return {
-              color: "black",
-              weight: 5,
-              opacity: 0.9
-            };
-          },
-          onEachFeature: function (feature, layer) {
-            const name = feature.properties && feature.properties.name ? feature.properties.name : "route";
-            layer.bindPopup(`<b>${name}</b>`);
-          }
+        map.fitBounds(allBounds, { padding: [20, 20] });
+
+        L.control.layers(null, overlayLayers, {
+          collapsed: false
         }).addTo(map);
 
-        // Zoom map to route bounds
-        map.fitBounds(routeLayer.getBounds(), { padding: [20, 20] });
-
-        // 4) Add a legend
         const legend = L.control({ position: "bottomright" });
         legend.onAdd = function () {
           const div = L.DomUtil.create("div", "legend-box");
-
           div.innerHTML = `
             <div style="font-weight:700; margin-bottom:6px;">Routes</div>
             <div class="legend-row">
-              <span class="swatch-line" style="border-top-color:#1f77b4;"></span>
-              <span>Dijkstra</span>
+              <span class="swatch-line" style="border-top-color:#111827;"></span>
+              <span>Combined Cost</span>
             </div>
             <div class="legend-row">
-              <span class="swatch-dash" style="border-top-color:#d62728;"></span>
-              <span>A*</span>
+              <span class="swatch-line" style="border-top-color:#16a34a; border-top-style:dashed;"></span>
+              <span>Population Only</span>
+            </div>
+            <div class="legend-row">
+              <span class="swatch-line" style="border-top-color:#2563eb;"></span>
+              <span>Distance Only</span>
+            </div>
+            <div class="legend-row">
+              <span class="swatch-line" style="border-top-color:#dc2626; border-top-style:dashed;"></span>
+              <span>Airspace Only</span>
             </div>
           `;
           return div;
         };
         legend.addTo(map);
-
       })
       .catch(err => {
         console.error(err);

@@ -1,200 +1,222 @@
+import math
+import time
+from pathlib import Path
+
 import geopandas as gpd
 import networkx as nx
-from shapely.geometry import Point, LineString
-import time
-import math
 import numpy as np
+from shapely.geometry import LineString, Point
 
 
-# Load grid
-grid = gpd.read_file("../map/risk_grid_v5.geojson")
-grid = grid.reset_index(drop=True)  # ensure 0..n-1 index
+GRID_PATH = Path(__file__).resolve().parent.parent / "map" / "risk_grid_v5.geojson"
+OUTPUT_PATH = Path(__file__).resolve().parent / "routes.geojson"
 
-# Build graph nodes
-G = nx.Graph()
+# Keep all normalized terms in a comparable range, but bias the combined route
+# toward avoiding constrained airspace more than distance or population.
+DISTANCE_WEIGHT = 0.8
+POPULATION_WEIGHT = 0.9
+AIRSPACE_WEIGHT = 1.4
 
-for i, row in grid.iterrows():
-    G.add_node(
-        i,
-        risk_cost=float(row["risk_cost"]),
-        city_risk=float(row["city_risk"]),
-        airport_risk_combined=float(row["airport_risk_combined"]),
-        risk_class=row["risk_class"],
-        geometry=row.geometry
-    )
-print("Nodes:", G.number_of_nodes())
-
-# Add edges as Dr. Xu mentioned, they must be diagonal too
-sindex = grid.sindex
-geoms = grid.geometry
-
-for i, geom in enumerate(geoms):
-    cand = list(sindex.intersection(geom.bounds))
-    for j in cand:
-        if j <= i:
-            continue
-        if geom.touches(geoms.iloc[j]):
-            G.add_edge(i, j)
-
-print("Edges:", G.number_of_edges())
-
-# Set weights = distance (meters) * (1 + risk)
-grid_m = grid.to_crs("EPSG:3857")
-centroids_m = grid_m.geometry.centroid
-
-# Precompute centroid coordinates (meters)
-cent_x = centroids_m.x.to_numpy()
-cent_y = centroids_m.y.to_numpy()
-city_risk = grid["city_risk"].to_numpy(dtype=float)
-airspace_risk = grid["airport_risk_combined"].to_numpy(dtype=float)
+ROUTE_SPECS = [
+    {
+        "name": "combined",
+        "label": "Combined Cost",
+        "distance_weight": DISTANCE_WEIGHT,
+        "population_weight": POPULATION_WEIGHT,
+        "airspace_weight": AIRSPACE_WEIGHT,
+    },
+    {
+        "name": "population_only",
+        "label": "Population Only",
+        "distance_weight": 0.0,
+        "population_weight": 1.0,
+        "airspace_weight": 0.0,
+    },
+    {
+        "name": "distance_only",
+        "label": "Distance Only",
+        "distance_weight": 1.0,
+        "population_weight": 0.0,
+        "airspace_weight": 0.0,
+    },
+    {
+        "name": "airspace_only",
+        "label": "Airspace Only",
+        "distance_weight": 0.0,
+        "population_weight": 0.0,
+        "airspace_weight": 1.0,
+    },
+]
 
 
-def normalize(values):
+def normalize(values: np.ndarray) -> tuple[np.ndarray, float]:
     maximum = float(np.max(values))
     if maximum <= 0:
         return np.zeros_like(values, dtype=float), 1.0
     return values / maximum, maximum
 
 
-city_risk_norm, city_risk_max = normalize(city_risk)
-airspace_risk_norm, airspace_risk_max = normalize(airspace_risk)
+def path_cost(graph: nx.Graph, path: list[int], weight: str) -> float:
+    return sum(graph[path[i]][path[i + 1]][weight] for i in range(len(path) - 1))
 
-def heuristic(u, v):
-    dx = cent_x[u] - cent_x[v]
-    dy = cent_y[u] - cent_y[v]
-    return DISTANCE_WEIGHT * (math.hypot(dx, dy) / max_edge_distance)
 
-DISTANCE_WEIGHT = 1.0
-POPULATION_WEIGHT = 1.0
-AIRSPACE_WEIGHT = 1.0
+def build_graph(grid: gpd.GeoDataFrame) -> tuple[nx.Graph, gpd.GeoSeries, np.ndarray, np.ndarray]:
+    graph = nx.Graph()
+    for i, row in grid.iterrows():
+        graph.add_node(
+            i,
+            risk_cost=float(row["risk_cost"]),
+            city_risk=float(row["city_risk"]),
+            airport_risk_combined=float(row["airport_risk_combined"]),
+            risk_class=row["risk_class"],
+            geometry=row.geometry,
+        )
 
-neighbor_distances = []
-for u, v in G.edges():
-    dx = cent_x[u] - cent_x[v]
-    dy = cent_y[u] - cent_y[v]
-    neighbor_distances.append(math.hypot(dx, dy))
+    sindex = grid.sindex
+    geoms = grid.geometry
+    for i, geom in enumerate(geoms):
+        for j in sindex.intersection(geom.bounds):
+            if j <= i:
+                continue
+            if geom.touches(geoms.iloc[j]):
+                graph.add_edge(i, j)
 
-max_edge_distance = max(neighbor_distances)
+    grid_m = grid.to_crs("EPSG:3857")
+    centroids_m = grid_m.geometry.centroid
+    cent_x = centroids_m.x.to_numpy()
+    cent_y = centroids_m.y.to_numpy()
+    return graph, centroids_m, cent_x, cent_y
 
-for u, v in G.edges():
-    dx = cent_x[u] - cent_x[v]
-    dy = cent_y[u] - cent_y[v]
-    d = math.hypot(dx, dy)
-    distance_norm = d / max_edge_distance
-    population_norm = 0.5 * (city_risk_norm[u] + city_risk_norm[v])
-    airspace_norm = 0.5 * (airspace_risk_norm[u] + airspace_risk_norm[v])
 
-    G[u][v]["weight"] = (
-        DISTANCE_WEIGHT * distance_norm
-        + POPULATION_WEIGHT * population_norm
-        + AIRSPACE_WEIGHT * airspace_norm
-    )
+def assign_edge_weights(
+    graph: nx.Graph,
+    cent_x: np.ndarray,
+    cent_y: np.ndarray,
+    city_risk_norm: np.ndarray,
+    airspace_risk_norm: np.ndarray,
+) -> float:
+    neighbor_distances = []
+    for u, v in graph.edges():
+        dx = cent_x[u] - cent_x[v]
+        dy = cent_y[u] - cent_y[v]
+        neighbor_distances.append(math.hypot(dx, dy))
 
-print("Normalization maxima:")
-print("  distance max edge (m):", max_edge_distance)
-print("  city_risk max:", city_risk_max)
-print("  airport_risk_combined max:", airspace_risk_max)
+    max_edge_distance = max(neighbor_distances)
 
-# Nearest-node lookup
-def node_for_point(lat, lon):
-    pt = Point(lon, lat)  # lon, lat
+    for u, v in graph.edges():
+        dx = cent_x[u] - cent_x[v]
+        dy = cent_y[u] - cent_y[v]
+        distance_norm = math.hypot(dx, dy) / max_edge_distance
+        population_norm = 0.5 * (city_risk_norm[u] + city_risk_norm[v])
+        airspace_norm = 0.5 * (airspace_risk_norm[u] + airspace_risk_norm[v])
 
-    cand = list(sindex.intersection(pt.bounds))
+        for spec in ROUTE_SPECS:
+            graph[u][v][f"weight_{spec['name']}"] = (
+                spec["distance_weight"] * distance_norm
+                + spec["population_weight"] * population_norm
+                + spec["airspace_weight"] * airspace_norm
+            )
 
-    for i in cand:
+    return max_edge_distance
+
+
+def node_for_point(
+    lat: float,
+    lon: float,
+    sindex,
+    geoms: gpd.GeoSeries,
+    centroids_m: gpd.GeoSeries,
+) -> int:
+    pt = Point(lon, lat)
+    for i in sindex.intersection(pt.bounds):
         if geoms.iloc[i].contains(pt):
             return int(i)
 
-    # fallback: nearest centroid in meters
     pt_m = gpd.GeoSeries([pt], crs="EPSG:4326").to_crs("EPSG:3857").iloc[0]
     return int(centroids_m.distance(pt_m).idxmin())
 
-start_lat, start_lon = 41.695923717435235, -88.12876224517822  # Clow
-end_lat, end_lon     = 41.87838051825937,  -87.63905525207521  # Union Station
-start_node = node_for_point(start_lat, start_lon)
-end_node   = node_for_point(end_lat, end_lon)
 
-print("Start node:", start_node, "End node:", end_node)
-dij_path = nx.dijkstra_path(G, start_node, end_node, weight="weight")
-print("Path nodes:", len(dij_path))
+def make_heuristic(distance_weight: float, cent_x: np.ndarray, cent_y: np.ndarray, max_edge_distance: float):
+    if distance_weight <= 0:
+        return lambda _u, _v: 0.0
 
-# A* algorithm
-a_path = nx.astar_path(G, start_node, end_node, heuristic=heuristic,weight="weight")
-print("A* path nodes:", len(a_path))
+    def heuristic(u: int, v: int) -> float:
+        dx = cent_x[u] - cent_x[v]
+        dy = cent_y[u] - cent_y[v]
+        return distance_weight * (math.hypot(dx, dy) / max_edge_distance)
 
-# Export route GeoJSON
-dij_line = LineString([grid.loc[n].geometry.centroid for n in dij_path])
-a_line   = LineString([grid.loc[n].geometry.centroid for n in a_path])
-
-routes = gpd.GeoDataFrame(
-    {"name": ["dijkstra", "astar"]},
-    geometry=[dij_line, a_line],
-    crs=grid.crs
-)
-
-routes.to_file("routes.geojson", driver="GeoJSON")
-print("Saved routes.geojson")
-
-### PERFORMANCE TEST
-def path_cost(G, path, weight="weight"):
-    return sum(G[path[i]][path[i+1]][weight] for i in range(len(path)-1))
+    return heuristic
 
 
-t0 = time.perf_counter()
-p1 = nx.dijkstra_path(G, start_node, end_node, weight="weight")
-t1 = time.perf_counter()
+def route_line(grid: gpd.GeoDataFrame, path: list[int]) -> LineString:
+    return LineString([grid.loc[n].geometry.centroid for n in path])
 
-t2 = time.perf_counter()
-p2 = nx.astar_path(G, start_node, end_node, heuristic=heuristic, weight="weight")
-t3 = time.perf_counter()
 
-print("Dijkstra seconds:", t1 - t0)
-print("A* seconds:", t3 - t2)
-print("Same path?", p1 == p2)
-print("Dijkstra cost:", path_cost(G, p1))
-print("A* cost:", path_cost(G, p2))
+def main() -> None:
+    grid = gpd.read_file(GRID_PATH).reset_index(drop=True)
+    graph, centroids_m, cent_x, cent_y = build_graph(grid)
 
-"""
-Output:
-Dijkstra seconds: 0.26059980000718497
-A* seconds: 0.8576807000063127
-Same path? False
-Dijkstra cost: 3212055.1838673027
-A* cost: 3212055.1838673023
+    city_risk = grid["city_risk"].to_numpy(dtype=float)
+    airspace_risk = grid["airport_risk_combined"].to_numpy(dtype=float)
+    city_risk_norm, city_risk_max = normalize(city_risk)
+    airspace_risk_norm, airspace_risk_max = normalize(airspace_risk)
+    max_edge_distance = assign_edge_weights(graph, cent_x, cent_y, city_risk_norm, airspace_risk_norm)
 
-After changing heuristic calculation:
-Dijkstra seconds: 0.28847320000932086
-A* seconds: 0.2662500000005821
-Same path? False
-Dijkstra cost: 3212055.1838673027
-A* cost: 3212055.1838673023
+    print("Nodes:", graph.number_of_nodes())
+    print("Edges:", graph.number_of_edges())
+    print("Normalization maxima:")
+    print("  distance max edge (m):", max_edge_distance)
+    print("  city_risk max:", city_risk_max)
+    print("  airport_risk_combined max:", airspace_risk_max)
+    print("Route weights:")
+    print("  combined:", DISTANCE_WEIGHT, POPULATION_WEIGHT, AIRSPACE_WEIGHT)
 
-# New performance metrics:
-Nodes: 101286
-Edges: 403235
-Start node: 77708 End node: 87693
-Path nodes: 114
-A* path nodes: 114
-Dijkstra seconds: 0.2512913000246044
-A* seconds: 0.04089380000368692
-Same path? True
-Dijkstra cost: 103983.27083941635
-A* cost: 103983.27083941635
+    sindex = grid.sindex
+    geoms = grid.geometry
 
-After normalization:
-Nodes: 101286
-Edges: 403235
-Normalization maxima:
-  distance max edge (m): 707.1067811911573
-  city_risk max: 120.0
-  airport_risk_combined max: 186.6979748846326
-Start node: 77708 End node: 87693
-Path nodes: 114
-A* path nodes: 114
-Saved routes.geojson
-Dijkstra seconds: 0.2288434000001871
-A* seconds: 0.036822400000346533
-Same path? True
-Dijkstra cost: 147.42153282431707
-A* cost: 147.42153282431707
-"""
+    start_lat, start_lon = 41.695923717435235, -88.12876224517822  # Clow
+    end_lat, end_lon = 41.87838051825937, -87.63905525207521  # Union Station
+    start_node = node_for_point(start_lat, start_lon, sindex, geoms, centroids_m)
+    end_node = node_for_point(end_lat, end_lon, sindex, geoms, centroids_m)
+    print("Start node:", start_node, "End node:", end_node)
+
+    route_rows = []
+    route_geometries = []
+
+    for spec in ROUTE_SPECS:
+        weight_key = f"weight_{spec['name']}"
+        heuristic = make_heuristic(spec["distance_weight"], cent_x, cent_y, max_edge_distance)
+
+        t0 = time.perf_counter()
+        path = nx.astar_path(graph, start_node, end_node, heuristic=heuristic, weight=weight_key)
+        elapsed = time.perf_counter() - t0
+        total_cost = path_cost(graph, path, weight_key)
+
+        route_rows.append(
+            {
+                "name": spec["name"],
+                "label": spec["label"],
+                "distance_weight": spec["distance_weight"],
+                "population_weight": spec["population_weight"],
+                "airspace_weight": spec["airspace_weight"],
+                "path_nodes": len(path),
+                "total_cost": total_cost,
+                "algorithm": "astar",
+            }
+        )
+        route_geometries.append(route_line(grid, path))
+
+        print(
+            f"{spec['name']}:",
+            f"nodes={len(path)}",
+            f"cost={total_cost:.4f}",
+            f"seconds={elapsed:.4f}",
+        )
+
+    routes = gpd.GeoDataFrame(route_rows, geometry=route_geometries, crs=grid.crs)
+    routes.to_file(OUTPUT_PATH, driver="GeoJSON")
+    print(f"Saved {OUTPUT_PATH}")
+
+
+if __name__ == "__main__":
+    main()
