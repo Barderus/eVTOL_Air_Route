@@ -117,6 +117,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <p>{summary}</p>
     <div class="metrics">
       <div class="metric">Rows: {row_count}</div>
+      <div class="metric">Density rows: {interpolated_row_count}</div>
       <div class="metric">Flights: {flight_count}</div>
       <div class="metric">Horizontal bin: {lat_step} deg / {lon_step} deg</div>
       <div class="metric">Vertical bin: {altitude_step} m</div>
@@ -413,6 +414,72 @@ def load_flight_data(csv_path: Path) -> pd.DataFrame:
     return data.sort_values("time").reset_index(drop=True)
 
 
+def interpolate_flight_paths(
+    data: pd.DataFrame,
+    step_seconds: int,
+    max_gap_seconds: int,
+) -> pd.DataFrame:
+    if step_seconds <= 0:
+        return data
+
+    interpolated_groups: list[pd.DataFrame] = []
+    columns = ["time", "lat", "lon", "baroaltitude", "icao24"]
+
+    for icao24, flight_rows in data.groupby("icao24", sort=False):
+        ordered = flight_rows.sort_values("time").reset_index(drop=True)
+        if len(ordered) < 2:
+            interpolated_groups.append(ordered[columns].copy())
+            continue
+
+        flight_records: list[dict[str, float | int | str]] = []
+        for index in range(len(ordered) - 1):
+            start = ordered.iloc[index]
+            end = ordered.iloc[index + 1]
+            start_time = int(start["time"])
+            end_time = int(end["time"])
+            gap_seconds = end_time - start_time
+
+            flight_records.append(
+                {
+                    "time": start_time,
+                    "lat": float(start["lat"]),
+                    "lon": float(start["lon"]),
+                    "baroaltitude": float(start["baroaltitude"]),
+                    "icao24": str(icao24),
+                }
+            )
+
+            if gap_seconds <= step_seconds or gap_seconds > max_gap_seconds:
+                continue
+
+            steps = range(step_seconds, gap_seconds, step_seconds)
+            for elapsed in steps:
+                ratio = elapsed / gap_seconds
+                flight_records.append(
+                    {
+                        "time": start_time + elapsed,
+                        "lat": float(start["lat"] + (end["lat"] - start["lat"]) * ratio),
+                        "lon": float(start["lon"] + (end["lon"] - start["lon"]) * ratio),
+                        "baroaltitude": float(start["baroaltitude"] + (end["baroaltitude"] - start["baroaltitude"]) * ratio),
+                        "icao24": str(icao24),
+                    }
+                )
+
+        last_row = ordered.iloc[-1]
+        flight_records.append(
+            {
+                "time": int(last_row["time"]),
+                "lat": float(last_row["lat"]),
+                "lon": float(last_row["lon"]),
+                "baroaltitude": float(last_row["baroaltitude"]),
+                "icao24": str(icao24),
+            }
+        )
+        interpolated_groups.append(pd.DataFrame.from_records(flight_records, columns=columns))
+
+    return pd.concat(interpolated_groups, ignore_index=True).sort_values("time").reset_index(drop=True)
+
+
 def pick_track_color(mean_altitude: float) -> list[int]:
     for max_altitude, color in TRACK_COLOR_BANDS:
         if mean_altitude < max_altitude:
@@ -574,7 +641,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "csv_path",
         nargs="?",
-        default=folder.parent / "opensky" / "output" / "ohare_2019-03-09_local_30s_15nm_bbox.csv",
+        default=folder.parent / "opensky" / "output" / "ohare_2019-03-09_local_15s_15nm_bbox.csv",
         type=Path,
         help="CSV file to read.",
     )
@@ -593,6 +660,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--lat-step", type=float, default=0.01, help="Latitude bin size in degrees.")
     parser.add_argument("--lon-step", type=float, default=0.01, help="Longitude bin size in degrees.")
     parser.add_argument("--altitude-step-m", type=int, default=250, help="Altitude bin size in meters.")
+    parser.add_argument(
+        "--interpolate-step-seconds",
+        type=int,
+        default=5,
+        help="Insert interpolated flight positions every N seconds before density binning.",
+    )
+    parser.add_argument(
+        "--max-interpolate-gap-seconds",
+        type=int,
+        default=180,
+        help="Only interpolate gaps up to this size to avoid bridging missing segments.",
+    )
     parser.add_argument("--track-stride", type=int, default=3, help="Keep every Nth point for each flight track.")
     parser.add_argument("--arrow-stride", type=int, default=6, help="Keep one directional segment every N track points.")
     return parser.parse_args()
@@ -601,7 +680,12 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     data = load_flight_data(args.csv_path)
-    density_rows = build_density_rows(data, args.lat_step, args.lon_step, args.altitude_step_m)
+    density_data = interpolate_flight_paths(
+        data,
+        step_seconds=max(1, args.interpolate_step_seconds),
+        max_gap_seconds=max(1, args.max_interpolate_gap_seconds),
+    )
+    density_rows = build_density_rows(density_data, args.lat_step, args.lon_step, args.altitude_step_m)
     cost_rows = flatten_cost_rows(density_rows)
     track_rows, arrow_rows, origin_rows = build_track_rows(
         data,
@@ -618,6 +702,7 @@ def main() -> None:
     replacements = {
         "summary": summary,
         "row_count": len(data),
+        "interpolated_row_count": len(density_data),
         "flight_count": data["icao24"].nunique(),
         "lat_step": args.lat_step,
         "lon_step": args.lon_step,
