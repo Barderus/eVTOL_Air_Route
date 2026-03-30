@@ -155,7 +155,13 @@ def parse_args() -> argparse.Namespace:
         default=Path.home() / "Downloads" / "Tools" / "trino",
         help="Path to the Trino CLI JAR file or a folder containing it.",
     )
-    parser.add_argument("--query-file", type=Path, default=folder / "query.sql", help="SQL template file.")
+    parser.add_argument(
+        "--query-file",
+        dest="query_file",
+        type=Path,
+        default=folder / "query.sql",
+        help="SQL template file.",
+    )
     parser.add_argument("--server", default="https://trino.opensky-network.org", help="Trino server URL.")
     parser.add_argument("--catalog", default="minio", help="Trino catalog name.")
     parser.add_argument("--schema", default="osky", help="Trino schema name.")
