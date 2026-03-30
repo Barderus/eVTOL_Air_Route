@@ -12,6 +12,12 @@ OHARE_LON = -87.90902412382081
 MIDWAY_LAT = 41.7856116663475
 MIDWAY_LON = -87.75331135429448
 TIME_WINDOWS = [1, 3, 6, 9, 12, 24]
+TRACK_COLOR_BANDS = [
+    (1500, [37, 99, 235, 180]),
+    (3000, [8, 145, 178, 180]),
+    (5000, [245, 158, 11, 180]),
+]
+HIGH_ALTITUDE_TRACK_COLOR = [220, 38, 38, 180]
 
 
 HTML_TEMPLATE = """<!DOCTYPE html>
@@ -125,6 +131,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   <script src="https://unpkg.com/deck.gl@9.0.13/dist.min.js"></script>
   <script>
     const densityData = {density_data};
+    const trackData = {track_data};
+    const arrowData = {arrow_data};
+    const originData = {origin_data};
     const timeButtons = {time_buttons};
     const airportPoints = [
       {{ position: [{ohare_lon}, {ohare_lat}, 0], color: [34, 197, 94, 255], radius: 500 }},
@@ -136,12 +145,16 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
     let currentHours = 24;
     let currentAltitude = Number(altitudeSlider.value);
+    let showDensity = true;
+    let showTracks = true;
+    let showArrows = true;
+    let showOrigins = true;
 
-    function getColor(count) {{
-      if (count >= 12) return [220, 38, 38, 220];
-      if (count >= 8) return [249, 115, 22, 210];
-      if (count >= 5) return [250, 204, 21, 195];
-      if (count >= 3) return [14, 165, 233, 175];
+    function getColor(cost) {{
+      if (cost >= 12) return [220, 38, 38, 220];
+      if (cost >= 8) return [249, 115, 22, 210];
+      if (cost >= 5) return [250, 204, 21, 195];
+      if (cost >= 3) return [14, 165, 233, 175];
       return [37, 99, 235, 160];
     }}
 
@@ -154,8 +167,26 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       return rows.filter((row) => row.altitude_top_m <= currentAltitude);
     }}
 
+    function getVisibleTracks() {{
+      const rows = trackData[String(currentHours)] || [];
+      return rows.filter((row) => row.max_altitude_m <= currentAltitude);
+    }}
+
+    function getVisibleArrows() {{
+      const rows = arrowData[String(currentHours)] || [];
+      return rows.filter((row) => row.target[2] <= currentAltitude);
+    }}
+
+    function getVisibleOrigins() {{
+      const rows = originData[String(currentHours)] || [];
+      return rows.filter((row) => row.position[2] <= currentAltitude);
+    }}
+
     function renderMap() {{
       const rows = getVisibleRows();
+      const visibleTracks = getVisibleTracks();
+      const visibleArrows = getVisibleArrows();
+      const visibleOrigins = getVisibleOrigins();
 
       const tileLayer = new deck.TileLayer({{
         id: "base-map",
@@ -186,7 +217,30 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         radiusMaxPixels: 40,
         getPosition: (row) => [row.lon, row.lat, row.altitude_mid_m],
         getRadius: (row) => row.radius_m,
-        getFillColor: (row) => getColor(row.count)
+        getFillColor: (row) => getColor(row.cost)
+      }});
+
+      const trackLayer = new deck.PathLayer({{
+        id: "flight-tracks",
+        data: visibleTracks,
+        pickable: true,
+        widthUnits: "meters",
+        widthMinPixels: 2,
+        getPath: (row) => row.path,
+        getColor: (row) => row.color,
+        getWidth: 140
+      }});
+
+      const arrowLayer = new deck.LineLayer({{
+        id: "flight-arrows",
+        data: visibleArrows,
+        pickable: true,
+        widthUnits: "meters",
+        widthMinPixels: 2,
+        getSourcePosition: (row) => row.source,
+        getTargetPosition: (row) => row.target,
+        getColor: (row) => row.color,
+        getWidth: 120
       }});
 
       const airportLayer = new deck.ScatterplotLayer({{
@@ -200,8 +254,39 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         lineWidthMinPixels: 2
       }});
 
+      const originLayer = new deck.ScatterplotLayer({{
+        id: "flight-origins",
+        data: visibleOrigins,
+        pickable: true,
+        filled: true,
+        stroked: true,
+        radiusUnits: "meters",
+        radiusMinPixels: 3,
+        radiusMaxPixels: 20,
+        getPosition: (row) => row.position,
+        getRadius: (row) => row.radius_m,
+        getFillColor: [0, 0, 0, 230],
+        getLineColor: [17, 24, 39, 255],
+        lineWidthMinPixels: 1
+      }});
+
+      const layers = [tileLayer];
+      if (showDensity) {{
+        layers.push(pointLayer);
+      }}
+      if (showTracks) {{
+        layers.push(trackLayer);
+      }}
+      if (showArrows) {{
+        layers.push(arrowLayer);
+      }}
+      if (showOrigins) {{
+        layers.push(originLayer);
+      }}
+      layers.push(airportLayer);
+
       deckMap.setProps({{
-        layers: [tileLayer, pointLayer, airportLayer]
+        layers: layers
       }});
     }}
 
@@ -230,14 +315,57 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       renderMap();
     }});
 
+    const viewToggles = [
+      {{ label: "Density", value: "density" }},
+      {{ label: "Tracks", value: "tracks" }},
+      {{ label: "Arrows", value: "arrows" }},
+      {{ label: "Origins", value: "origins" }}
+    ];
+
+    const toggleRow = document.createElement("div");
+    toggleRow.className = "toggle-row";
+    viewToggles.forEach((toggle) => {{
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = toggle.label;
+      button.classList.add("active");
+      button.addEventListener("click", () => {{
+        if (toggle.value === "density") {{
+          showDensity = !showDensity;
+          button.classList.toggle("active", showDensity);
+        }} else if (toggle.value === "tracks") {{
+          showTracks = !showTracks;
+          button.classList.toggle("active", showTracks);
+        }} else if (toggle.value === "arrows") {{
+          showArrows = !showArrows;
+          button.classList.toggle("active", showArrows);
+        }} else {{
+          showOrigins = !showOrigins;
+          button.classList.toggle("active", showOrigins);
+        }}
+        renderMap();
+      }});
+      toggleRow.appendChild(button);
+    }});
+    document.querySelector(".panel").appendChild(toggleRow);
+
     const deckMap = new deck.DeckGL({{
       container: "app",
       controller: true,
       map: false,
       getTooltip: ({object}) => object && (
-        `Count: ${{object.count}}\\n` +
-        `Altitude band: ${{object.altitude_bottom_m}}-${{object.altitude_top_m}} m\\n` +
-        `Cell center: ${{object.lat.toFixed(4)}}, ${{object.lon.toFixed(4)}}`
+        object.count !== undefined
+          ? (
+            `Cost: ${{object.cost}}\\n` +
+            `Count: ${{object.count}}\\n` +
+            `Altitude band: ${{object.altitude_bottom_m}}-${{object.altitude_top_m}} m\\n` +
+            `Cell center: ${{object.lat.toFixed(4)}}, ${{object.lon.toFixed(4)}}`
+          )
+          : object.position
+            ? `Origin point\\nICAO24: ${{object.icao24}}\\nFirst sample altitude: ${{object.altitude_m.toFixed(0)}} m`
+            : object.icao24
+            ? `ICAO24: ${{object.icao24}}\\nSamples: ${{object.samples}}\\nMean altitude: ${{object.mean_altitude_m.toFixed(0)}} m`
+            : null
       ),
       initialViewState: {{
         longitude: {ohare_lon},
@@ -285,6 +413,13 @@ def load_flight_data(csv_path: Path) -> pd.DataFrame:
     return data.sort_values("time").reset_index(drop=True)
 
 
+def pick_track_color(mean_altitude: float) -> list[int]:
+    for max_altitude, color in TRACK_COLOR_BANDS:
+        if mean_altitude < max_altitude:
+            return color
+    return HIGH_ALTITUDE_TRACK_COLOR
+
+
 def build_density_rows(data: pd.DataFrame, lat_step: float, lon_step: float, altitude_step: int) -> dict[str, list[dict[str, float | int]]]:
     start_time = int(data["time"].min())
     all_windows: dict[str, list[dict[str, float | int]]] = {}
@@ -305,6 +440,11 @@ def build_density_rows(data: pd.DataFrame, lat_step: float, lon_step: float, alt
             .agg(count=("time", "size"))
             .sort_values("count", ascending=False)
         )
+        horizontal_costs = (
+            window_data.groupby(["lat_bin", "lon_bin"], as_index=False)
+            .agg(cost=("time", "size"))
+        )
+        grouped = grouped.merge(horizontal_costs, on=["lat_bin", "lon_bin"], how="left")
 
         radius_meters = max(150, int(min(lat_step, lon_step) * 111_000 * 0.45))
         rows = []
@@ -320,6 +460,7 @@ def build_density_rows(data: pd.DataFrame, lat_step: float, lon_step: float, alt
                     "altitude_top_m": top,
                     "altitude_mid_m": middle,
                     "count": int(row.count),
+                    "cost": int(row.cost),
                     "radius_m": radius_meters,
                 }
             )
@@ -329,13 +470,111 @@ def build_density_rows(data: pd.DataFrame, lat_step: float, lon_step: float, alt
     return all_windows
 
 
+def flatten_cost_rows(density_rows: dict[str, list[dict[str, float | int]]]) -> pd.DataFrame:
+    flattened: list[dict[str, float | int | str]] = []
+    for hours, rows in density_rows.items():
+        for row in rows:
+            flattened.append(
+                {
+                    "hours": str(hours),
+                    "lat": row["lat"],
+                    "lon": row["lon"],
+                    "altitude_bottom_m": row["altitude_bottom_m"],
+                    "altitude_top_m": row["altitude_top_m"],
+                    "altitude_mid_m": row["altitude_mid_m"],
+                    "observation_count": row["count"],
+                    "cost": row["cost"],
+                }
+            )
+
+    return pd.DataFrame(flattened)
+
+
+def build_track_rows(
+    data: pd.DataFrame,
+    track_stride: int,
+    arrow_stride: int,
+) -> tuple[
+    dict[str, list[dict[str, object]]],
+    dict[str, list[dict[str, object]]],
+    dict[str, list[dict[str, object]]],
+]:
+    start_time = int(data["time"].min())
+    all_tracks: dict[str, list[dict[str, object]]] = {}
+    all_arrows: dict[str, list[dict[str, object]]] = {}
+    all_origins: dict[str, list[dict[str, object]]] = {}
+
+    for hours in TIME_WINDOWS:
+        cutoff = start_time + hours * 3600
+        window_data = data[data["time"] < cutoff].copy()
+        if window_data.empty:
+            all_tracks[str(hours)] = []
+            all_arrows[str(hours)] = []
+            all_origins[str(hours)] = []
+            continue
+
+        sampled = window_data[window_data.groupby("icao24").cumcount() % track_stride == 0]
+        track_rows: list[dict[str, object]] = []
+        arrow_rows: list[dict[str, object]] = []
+        origin_rows: list[dict[str, object]] = []
+
+        for icao24, flight_rows in sampled.groupby("icao24", sort=False):
+            ordered = flight_rows.sort_values("time")
+            if len(ordered) < 2:
+                continue
+
+            mean_altitude = float(ordered["baroaltitude"].mean())
+            color = pick_track_color(mean_altitude)
+            first_row = ordered.iloc[0]
+            path = [
+                [float(row.lon), float(row.lat), float(row.baroaltitude)]
+                for row in ordered.itertuples()
+            ]
+            track_rows.append(
+                {
+                    "icao24": str(icao24),
+                    "path": path,
+                    "color": color,
+                    "samples": len(path),
+                    "mean_altitude_m": mean_altitude,
+                    "max_altitude_m": float(ordered["baroaltitude"].max()),
+                }
+            )
+            origin_rows.append(
+                {
+                    "icao24": str(icao24),
+                    "position": [float(first_row["lon"]), float(first_row["lat"]), float(first_row["baroaltitude"])],
+                    "altitude_m": float(first_row["baroaltitude"]),
+                    "radius_m": 250.0,
+                }
+            )
+
+            for index in range(1, len(path), arrow_stride):
+                arrow_rows.append(
+                    {
+                        "icao24": str(icao24),
+                        "source": path[index - 1],
+                        "target": path[index],
+                        "color": color,
+                        "samples": len(path),
+                        "mean_altitude_m": mean_altitude,
+                    }
+                )
+
+        all_tracks[str(hours)] = track_rows
+        all_arrows[str(hours)] = arrow_rows
+        all_origins[str(hours)] = origin_rows
+
+    return all_tracks, all_arrows, all_origins
+
+
 def parse_args() -> argparse.Namespace:
     folder = Path(__file__).resolve().parent
     parser = argparse.ArgumentParser(description="Create a 3D density map from an OpenSky CSV file.")
     parser.add_argument(
         "csv_path",
         nargs="?",
-        default=folder.parent / "opensky" / "output" / "ohare_2019-03-09_local_1s_15nm_bbox.csv",
+        default=folder.parent / "opensky" / "output" / "ohare_2019-03-09_local_30s_15nm_bbox.csv",
         type=Path,
         help="CSV file to read.",
     )
@@ -345,9 +584,17 @@ def parse_args() -> argparse.Namespace:
         default=folder / "output" / "ohare_3d_density_map.html",
         help="Output HTML file.",
     )
+    parser.add_argument(
+        "--cost-output",
+        type=Path,
+        default=folder / "output" / "ohare_3d_cell_costs.csv",
+        help="Output CSV file for 3D cell costs.",
+    )
     parser.add_argument("--lat-step", type=float, default=0.01, help="Latitude bin size in degrees.")
     parser.add_argument("--lon-step", type=float, default=0.01, help="Longitude bin size in degrees.")
     parser.add_argument("--altitude-step-m", type=int, default=250, help="Altitude bin size in meters.")
+    parser.add_argument("--track-stride", type=int, default=3, help="Keep every Nth point for each flight track.")
+    parser.add_argument("--arrow-stride", type=int, default=6, help="Keep one directional segment every N track points.")
     return parser.parse_args()
 
 
@@ -355,6 +602,12 @@ def main() -> None:
     args = parse_args()
     data = load_flight_data(args.csv_path)
     density_rows = build_density_rows(data, args.lat_step, args.lon_step, args.altitude_step_m)
+    cost_rows = flatten_cost_rows(density_rows)
+    track_rows, arrow_rows, origin_rows = build_track_rows(
+        data,
+        track_stride=max(1, args.track_stride),
+        arrow_stride=max(1, args.arrow_stride),
+    )
 
     slider_max = int(((data["baroaltitude"].max() // args.altitude_step_m) + 1) * args.altitude_step_m)
     summary = (
@@ -371,6 +624,9 @@ def main() -> None:
         "altitude_step": args.altitude_step_m,
         "slider_max": slider_max,
         "density_data": json.dumps(density_rows),
+        "track_data": json.dumps(track_rows),
+        "arrow_data": json.dumps(arrow_rows),
+        "origin_data": json.dumps(origin_rows),
         "time_buttons": json.dumps(TIME_WINDOWS),
         "ohare_lon": OHARE_LON,
         "ohare_lat": OHARE_LAT,
@@ -381,9 +637,13 @@ def main() -> None:
     for key, value in replacements.items():
         html = html.replace(f"{{{key}}}", str(value))
     html = html.replace("{{", "{").replace("}}", "}")
+    args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(html, encoding="utf-8")
+    args.cost_output.parent.mkdir(parents=True, exist_ok=True)
+    cost_rows.to_csv(args.cost_output, index=False)
 
     print(f"Saved 3D HTML map: {args.output}")
+    print(f"Saved 3D cell costs: {args.cost_output}")
     print(f"Rows processed: {len(data)}")
     print(f"Flights processed: {data['icao24'].nunique()}")
 
