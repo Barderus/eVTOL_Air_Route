@@ -44,7 +44,7 @@ print(q_low, q_med)
 print(gdf_merged_crs["density_risk"].value_counts())
 
 # Save as GeoJSON for Leaflet
-out_geojson = "il_blockgroups_population_density.geojson"
+out_geojson = "../geojson/il_blockgroups_population_density.geojson"
 gdf_merged_crs.to_file(out_geojson, driver="GeoJSON")
 print("Saved:", out_geojson)
 
