@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Route Preview</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+
+  <style>
+    html, body { height: 100%; margin: 0; }
+    #map { height: 100%; width: 100%; }
+
+    .legend-box {
+      background: white;
+      padding: 10px 12px;
+      border-radius: 8px;
+      box-shadow: 0 1px 8px rgba(0,0,0,0.2);
+      font-family: Arial, sans-serif;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    .legend-row { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+    .swatch-line {
+      width: 34px;
+      height: 0;
+      border-top: 4px solid #000;
+      display: inline-block;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+
+  <script>
+    const map = L.map("map").setView([41.88, -87.63], 10);
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: "&copy; OpenStreetMap contributors"
+    }).addTo(map);
+
+    const routeStyles = {
+      combined: { color: "#111827", weight: 7, opacity: 0.95 },
+      population_only: { color: "#16a34a", weight: 6, opacity: 0.9, dashArray: "10 6" },
+      distance_only: { color: "#2563eb", weight: 6, opacity: 0.9 },
+      airspace_only: { color: "#dc2626", weight: 6, opacity: 0.9, dashArray: "4 8" }
+    };
+
+    const routeLabels = {
+      combined: "Combined Cost",
+      population_only: "Population Only",
+      distance_only: "Distance Only",
+      airspace_only: "Airspace Only"
+    };
+
+    fetch("../geojson/routes.geojson")
+      .then(r => {
+        if (!r.ok) throw new Error("Failed to load routes.geojson");
+        return r.json();
+      })
+      .then(data => {
+        const overlayLayers = {};
+        const allBounds = L.latLngBounds([]);
+
+        data.features.forEach(feature => {
+          const p = feature.properties || {};
+          const name = p.name || "route";
+          const label = p.label || routeLabels[name] || name;
+          const layer = L.geoJSON(feature, {
+            style: function () {
+              return routeStyles[name] || { color: "black", weight: 5, opacity: 0.9 };
+            },
+            onEachFeature: function (_feature, featureLayer) {
+              const totalCost = typeof p.total_cost === "number" ? p.total_cost.toFixed(3) : "n/a";
+              const pathNodes = p.path_nodes ?? "n/a";
+              featureLayer.bindPopup(
+                `<b>${label}</b><br>` +
+                `Cost: ${totalCost}<br>` +
+                `Nodes: ${pathNodes}<br>` +
+                `Weights: D=${p.distance_weight}, P=${p.population_weight}, A=${p.airspace_weight}`
+              );
+            }
+          });
+
+          overlayLayers[label] = layer;
+          layer.addTo(map);
+          allBounds.extend(layer.getBounds());
+        });
+
+        map.fitBounds(allBounds, { padding: [20, 20] });
+
+        L.control.layers(null, overlayLayers, {
+          collapsed: false
+        }).addTo(map);
+
+        const legend = L.control({ position: "bottomright" });
+        legend.onAdd = function () {
+          const div = L.DomUtil.create("div", "legend-box");
+          div.innerHTML = `
+            <div style="font-weight:700; margin-bottom:6px;">Routes</div>
+            <div class="legend-row">
+              <span class="swatch-line" style="border-top-color:#111827;"></span>
+              <span>Combined Cost</span>
+            </div>
+            <div class="legend-row">
+              <span class="swatch-line" style="border-top-color:#16a34a; border-top-style:dashed;"></span>
+              <span>Population Only</span>
+            </div>
+            <div class="legend-row">
+              <span class="swatch-line" style="border-top-color:#2563eb;"></span>
+              <span>Distance Only</span>
+            </div>
+            <div class="legend-row">
+              <span class="swatch-line" style="border-top-color:#dc2626; border-top-style:dashed;"></span>
+              <span>Airspace Only</span>
+            </div>
+          `;
+          return div;
+        };
+        legend.addTo(map);
+      })
+      .catch(err => {
+        console.error(err);
+        alert(err.message + "\n\nTip: open this page via a local server (not file://).");
+      });
+  </script>
+</body>
+</html>
