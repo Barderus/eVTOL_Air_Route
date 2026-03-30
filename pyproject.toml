@@ -1,0 +1,11 @@
+[project]
+name = "evotl-map"
+version = "0.1.0"
+description = "Chicago-region eVTOL airspace modeling, traffic density visualization, and routing experiments"
+requires-python = ">=3.12"
+dependencies = [
+    "geopandas>=1.0",
+    "matplotlib>=3.9",
+    "networkx>=3.4",
+    "pandas>=2.2",
+]
