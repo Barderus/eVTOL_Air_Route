@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 OHARE_LAT = 41.97807408541273
 OHARE_LON = -87.90902412382081
 NM_TO_KM = 1.852
+FEET_TO_METERS = 0.3048
 JOLIET_LAT = 41.52519
 ARLINGTON_HEIGHTS_LAT = 42.08836
 PINGREE_GROVE_LON = -88.413416
@@ -185,7 +186,7 @@ def parse_args() -> argparse.Namespace:
         help="West longitude bound. Default is Pingree Grove, IL.",
     )
     parser.add_argument("--east", type=float, default=None, help="Override east longitude bound.")
-    parser.add_argument("--altitude-max-m", type=float, default=10000.0, help="Maximum barometric altitude in meters.")
+    parser.add_argument("--altitude-max-ft", type=float, default=32808.4, help="Maximum barometric altitude in feet MSL.")
     parser.add_argument("--sample-seconds", type=int, default=1, help="Keep one row every N seconds.")
     parser.add_argument("--output", type=Path, default=None, help="Output CSV file path.")
     return parser.parse_args()
@@ -216,7 +217,7 @@ def main() -> None:
             "north": north,
             "west": west,
             "east": east,
-            "altitude_max_m": args.altitude_max_m,
+            "altitude_max_m": args.altitude_max_ft * FEET_TO_METERS,
             "sample_seconds": args.sample_seconds,
         },
     )

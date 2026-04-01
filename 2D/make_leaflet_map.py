@@ -12,6 +12,8 @@ OHARE_LON = -87.90902412382081
 MIDWAY_LAT = 41.7856116663475
 MIDWAY_LON = -87.75331135429448
 TIME_WINDOWS = [1, 3, 6, 9, 12, 24]
+METERS_TO_FEET = 3.28084
+GROUND_ELEVATION_FT_MSL = 680.0
 
 
 HTML_TEMPLATE = """<!DOCTYPE html>
@@ -145,10 +147,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     const originLayer = L.layerGroup();
     const timeToggle = document.getElementById("timeToggle");
 
-    function pickTrackColor(meanAltitude) {{
-      if (meanAltitude < 1500) return "#2563eb";
-      if (meanAltitude < 3000) return "#0891b2";
-      if (meanAltitude < 5000) return "#f59e0b";
+    function pickTrackColor(meanAltitudeAglFt) {{
+      if (meanAltitudeAglFt < 1500) return "#2563eb";
+      if (meanAltitudeAglFt < 3000) return "#0891b2";
+      if (meanAltitudeAglFt < 5000) return "#f59e0b";
       return "#dc2626";
     }}
 
@@ -176,8 +178,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         flightRows.sort((a, b) => a.time - b.time);
         const points = flightRows.map((row) => [row.lat, row.lon]);
         const firstRow = flightRows[0];
-        const meanAltitude = flightRows.reduce((total, row) => total + row.baroaltitude, 0) / flightRows.length;
-        const color = pickTrackColor(meanAltitude);
+        const meanAltitudeAglFt = flightRows.reduce((total, row) => total + row.altitude_agl_ft, 0) / flightRows.length;
+        const color = pickTrackColor(meanAltitudeAglFt);
 
         const line = L.polyline(points, {{
           color: color,
@@ -186,7 +188,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         }}).bindPopup(
           `<b>ICAO24:</b> ${{icao24}}<br>` +
           `<b>Samples:</b> ${{points.length}}<br>` +
-          `<b>Mean altitude:</b> ${{meanAltitude.toFixed(0)}} m`
+          `<b>Mean altitude:</b> ${{meanAltitudeAglFt.toFixed(0)}} ft AGL`
         );
 
         const arrows = L.polylineDecorator(line, {{
@@ -215,7 +217,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           `<b>Origin point</b><br>` +
           `<b>ICAO24:</b> ${{icao24}}<br>` +
           `<b>First sample:</b> ${{new Date(firstRow.time * 1000).toISOString()}}<br>` +
-          `<b>Altitude:</b> ${{firstRow.baroaltitude.toFixed(0)}} m`
+          `<b>Altitude:</b> ${{firstRow.altitude_agl_ft.toFixed(0)}} ft AGL`
         );
 
         line.addTo(trackLayer);
@@ -313,6 +315,7 @@ def load_flight_data(csv_path: Path) -> pd.DataFrame:
     data["lat"] = data["lat"].astype(float)
     data["lon"] = data["lon"].astype(float)
     data["baroaltitude"] = data["baroaltitude"].astype(float)
+    data["altitude_agl_ft"] = (data["baroaltitude"] * METERS_TO_FEET - GROUND_ELEVATION_FT_MSL).clip(lower=0.0)
     data["icao24"] = data["icao24"].astype(str)
     return data
 
@@ -323,7 +326,7 @@ def build_windowed_observations(data: pd.DataFrame) -> dict[str, list[dict[str, 
 
     for hours in TIME_WINDOWS:
         cutoff = start_epoch + hours * 3600
-        rows = data[data["time"] < cutoff][["time", "lat", "lon", "baroaltitude", "icao24"]]
+        rows = data[data["time"] < cutoff][["time", "lat", "lon", "baroaltitude", "altitude_agl_ft", "icao24"]]
         windowed[str(hours)] = rows.to_dict(orient="records")
 
     return windowed

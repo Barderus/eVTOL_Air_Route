@@ -12,6 +12,8 @@ OHARE_LON = -87.90902412382081
 MIDWAY_LAT = 41.7856116663475
 MIDWAY_LON = -87.75331135429448
 TIME_WINDOWS = [1, 3, 6, 9, 12, 24]
+METERS_TO_FEET = 3.28084
+GROUND_ELEVATION_FT_MSL = 680.0
 TRACK_COLOR_BANDS = [
     (1500, [37, 99, 235, 180]),
     (3000, [8, 145, 178, 180]),
@@ -120,7 +122,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       <div class="metric">Density rows: {interpolated_row_count}</div>
       <div class="metric">Flights: {flight_count}</div>
       <div class="metric">Horizontal bin: {lat_step} deg / {lon_step} deg</div>
-      <div class="metric">Vertical bin: {altitude_step} m</div>
+      <div class="metric">Vertical bin: {altitude_step} ft</div>
     </div>
     <div class="toggle-row" id="timeToggle"></div>
     <div class="slider-row">
@@ -160,17 +162,17 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     }}
 
     function updateAltitudeText() {{
-      altitudeValue.textContent = `${{currentAltitude}} m`;
+      altitudeValue.textContent = `${{currentAltitude}} ft AGL`;
     }}
 
     function getVisibleRows() {{
       const rows = densityData[String(currentHours)] || [];
-      return rows.filter((row) => row.altitude_top_m <= currentAltitude);
+      return rows.filter((row) => row.altitude_top_ft <= currentAltitude);
     }}
 
     function getVisibleTracks() {{
       const rows = trackData[String(currentHours)] || [];
-      return rows.filter((row) => row.max_altitude_m <= currentAltitude);
+      return rows.filter((row) => row.max_altitude_ft <= currentAltitude);
     }}
 
     function getVisibleArrows() {{
@@ -216,7 +218,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         radiusUnits: "meters",
         radiusMinPixels: 2,
         radiusMaxPixels: 40,
-        getPosition: (row) => [row.lon, row.lat, row.altitude_mid_m],
+        getPosition: (row) => [row.lon, row.lat, row.altitude_mid_ft],
         getRadius: (row) => row.radius_m,
         getFillColor: (row) => getColor(row.cost)
       }});
@@ -359,13 +361,13 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           ? (
             `Cost: ${{object.cost}}\\n` +
             `Count: ${{object.count}}\\n` +
-            `Altitude band: ${{object.altitude_bottom_m}}-${{object.altitude_top_m}} m\\n` +
+            `Altitude band: ${{object.altitude_bottom_ft}}-${{object.altitude_top_ft}} ft AGL\\n` +
             `Cell center: ${{object.lat.toFixed(4)}}, ${{object.lon.toFixed(4)}}`
           )
           : object.position
-            ? `Origin point\\nICAO24: ${{object.icao24}}\\nFirst sample altitude: ${{object.altitude_m.toFixed(0)}} m`
+            ? `Origin point\\nICAO24: ${{object.icao24}}\\nFirst sample altitude: ${{object.altitude_ft.toFixed(0)}} ft AGL`
             : object.icao24
-            ? `ICAO24: ${{object.icao24}}\\nSamples: ${{object.samples}}\\nMean altitude: ${{object.mean_altitude_m.toFixed(0)}} m`
+            ? `ICAO24: ${{object.icao24}}\\nSamples: ${{object.samples}}\\nMean altitude: ${{object.mean_altitude_ft.toFixed(0)}} ft AGL`
             : null
       ),
       initialViewState: {{
@@ -410,6 +412,7 @@ def load_flight_data(csv_path: Path) -> pd.DataFrame:
     data["lat"] = data["lat"].astype(float)
     data["lon"] = data["lon"].astype(float)
     data["baroaltitude"] = data["baroaltitude"].astype(float)
+    data["altitude_agl_ft"] = (data["baroaltitude"] * METERS_TO_FEET - GROUND_ELEVATION_FT_MSL).clip(lower=0.0)
     data["icao24"] = data["icao24"].astype(str)
     return data.sort_values("time").reset_index(drop=True)
 
@@ -423,7 +426,7 @@ def interpolate_flight_paths(
         return data
 
     interpolated_groups: list[pd.DataFrame] = []
-    columns = ["time", "lat", "lon", "baroaltitude", "icao24"]
+    columns = ["time", "lat", "lon", "baroaltitude", "altitude_agl_ft", "icao24"]
 
     for icao24, flight_rows in data.groupby("icao24", sort=False):
         ordered = flight_rows.sort_values("time").reset_index(drop=True)
@@ -445,6 +448,7 @@ def interpolate_flight_paths(
                     "lat": float(start["lat"]),
                     "lon": float(start["lon"]),
                     "baroaltitude": float(start["baroaltitude"]),
+                    "altitude_agl_ft": float(start["altitude_agl_ft"]),
                     "icao24": str(icao24),
                 }
             )
@@ -461,6 +465,7 @@ def interpolate_flight_paths(
                         "lat": float(start["lat"] + (end["lat"] - start["lat"]) * ratio),
                         "lon": float(start["lon"] + (end["lon"] - start["lon"]) * ratio),
                         "baroaltitude": float(start["baroaltitude"] + (end["baroaltitude"] - start["baroaltitude"]) * ratio),
+                        "altitude_agl_ft": float(start["altitude_agl_ft"] + (end["altitude_agl_ft"] - start["altitude_agl_ft"]) * ratio),
                         "icao24": str(icao24),
                     }
                 )
@@ -472,6 +477,7 @@ def interpolate_flight_paths(
                 "lat": float(last_row["lat"]),
                 "lon": float(last_row["lon"]),
                 "baroaltitude": float(last_row["baroaltitude"]),
+                "altitude_agl_ft": float(last_row["altitude_agl_ft"]),
                 "icao24": str(icao24),
             }
         )
@@ -480,9 +486,9 @@ def interpolate_flight_paths(
     return pd.concat(interpolated_groups, ignore_index=True).sort_values("time").reset_index(drop=True)
 
 
-def pick_track_color(mean_altitude: float) -> list[int]:
+def pick_track_color(mean_altitude_ft: float) -> list[int]:
     for max_altitude, color in TRACK_COLOR_BANDS:
-        if mean_altitude < max_altitude:
+        if mean_altitude_ft < max_altitude:
             return color
     return HIGH_ALTITUDE_TRACK_COLOR
 
@@ -500,7 +506,7 @@ def build_density_rows(data: pd.DataFrame, lat_step: float, lon_step: float, alt
 
         window_data["lat_bin"] = ((window_data["lat"] / lat_step).round().astype(int)) * lat_step
         window_data["lon_bin"] = ((window_data["lon"] / lon_step).round().astype(int)) * lon_step
-        window_data["altitude_bin"] = (window_data["baroaltitude"] // altitude_step).astype(int)
+        window_data["altitude_bin"] = (window_data["altitude_agl_ft"] // altitude_step).astype(int)
 
         grouped = (
             window_data.groupby(["lat_bin", "lon_bin", "altitude_bin"], as_index=False)
@@ -523,9 +529,9 @@ def build_density_rows(data: pd.DataFrame, lat_step: float, lon_step: float, alt
                 {
                     "lat": float(row.lat_bin),
                     "lon": float(row.lon_bin),
-                    "altitude_bottom_m": bottom,
-                    "altitude_top_m": top,
-                    "altitude_mid_m": middle,
+                    "altitude_bottom_ft": bottom,
+                    "altitude_top_ft": top,
+                    "altitude_mid_ft": middle,
                     "count": int(row.count),
                     "cost": int(row.cost),
                     "radius_m": radius_meters,
@@ -546,9 +552,9 @@ def flatten_cost_rows(density_rows: dict[str, list[dict[str, float | int]]]) -> 
                     "hours": str(hours),
                     "lat": row["lat"],
                     "lon": row["lon"],
-                    "altitude_bottom_m": row["altitude_bottom_m"],
-                    "altitude_top_m": row["altitude_top_m"],
-                    "altitude_mid_m": row["altitude_mid_m"],
+                    "altitude_bottom_ft": row["altitude_bottom_ft"],
+                    "altitude_top_ft": row["altitude_top_ft"],
+                    "altitude_mid_ft": row["altitude_mid_ft"],
                     "observation_count": row["count"],
                     "cost": row["cost"],
                 }
@@ -590,11 +596,11 @@ def build_track_rows(
             if len(ordered) < 2:
                 continue
 
-            mean_altitude = float(ordered["baroaltitude"].mean())
-            color = pick_track_color(mean_altitude)
+            mean_altitude_ft = float(ordered["altitude_agl_ft"].mean())
+            color = pick_track_color(mean_altitude_ft)
             first_row = ordered.iloc[0]
             path = [
-                [float(row.lon), float(row.lat), float(row.baroaltitude)]
+                [float(row.lon), float(row.lat), float(row.altitude_agl_ft)]
                 for row in ordered.itertuples()
             ]
             track_rows.append(
@@ -603,15 +609,15 @@ def build_track_rows(
                     "path": path,
                     "color": color,
                     "samples": len(path),
-                    "mean_altitude_m": mean_altitude,
-                    "max_altitude_m": float(ordered["baroaltitude"].max()),
+                    "mean_altitude_ft": mean_altitude_ft,
+                    "max_altitude_ft": float(ordered["altitude_agl_ft"].max()),
                 }
             )
             origin_rows.append(
                 {
                     "icao24": str(icao24),
-                    "position": [float(first_row["lon"]), float(first_row["lat"]), float(first_row["baroaltitude"])],
-                    "altitude_m": float(first_row["baroaltitude"]),
+                    "position": [float(first_row["lon"]), float(first_row["lat"]), float(first_row["altitude_agl_ft"])],
+                    "altitude_ft": float(first_row["altitude_agl_ft"]),
                     "radius_m": 250.0,
                 }
             )
@@ -624,7 +630,7 @@ def build_track_rows(
                         "target": path[index],
                         "color": color,
                         "samples": len(path),
-                        "mean_altitude_m": mean_altitude,
+                        "mean_altitude_ft": mean_altitude_ft,
                     }
                 )
 
@@ -659,7 +665,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--lat-step", type=float, default=0.01, help="Latitude bin size in degrees.")
     parser.add_argument("--lon-step", type=float, default=0.01, help="Longitude bin size in degrees.")
-    parser.add_argument("--altitude-step-m", type=int, default=250, help="Altitude bin size in meters.")
+    parser.add_argument("--altitude-step-ft", type=int, default=1000, help="Altitude bin size in feet AGL.")
     parser.add_argument(
         "--interpolate-step-seconds",
         type=int,
@@ -685,7 +691,7 @@ def main() -> None:
         step_seconds=max(1, args.interpolate_step_seconds),
         max_gap_seconds=max(1, args.max_interpolate_gap_seconds),
     )
-    density_rows = build_density_rows(density_data, args.lat_step, args.lon_step, args.altitude_step_m)
+    density_rows = build_density_rows(density_data, args.lat_step, args.lon_step, args.altitude_step_ft)
     cost_rows = flatten_cost_rows(density_rows)
     track_rows, arrow_rows, origin_rows = build_track_rows(
         data,
@@ -693,7 +699,7 @@ def main() -> None:
         arrow_stride=max(1, args.arrow_stride),
     )
 
-    slider_max = int(((data["baroaltitude"].max() // args.altitude_step_m) + 1) * args.altitude_step_m)
+    slider_max = int(((data["altitude_agl_ft"].max() // args.altitude_step_ft) + 1) * args.altitude_step_ft)
     summary = (
         "This view groups OpenSky state vectors into longitude, latitude, and altitude boxes. "
         "Each point shows one occupied box and the color gets stronger when more observations fall inside it."
@@ -706,7 +712,7 @@ def main() -> None:
         "flight_count": data["icao24"].nunique(),
         "lat_step": args.lat_step,
         "lon_step": args.lon_step,
-        "altitude_step": args.altitude_step_m,
+        "altitude_step": args.altitude_step_ft,
         "slider_max": slider_max,
         "density_data": json.dumps(density_rows),
         "track_data": json.dumps(track_rows),
