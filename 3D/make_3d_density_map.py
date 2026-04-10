@@ -14,6 +14,7 @@ MIDWAY_LON = -87.75331135429448
 TIME_WINDOWS = [1, 3, 6, 9, 12, 24]
 METERS_TO_FEET = 3.28084
 GROUND_ELEVATION_FT_MSL = 680.0
+DEFAULT_MAX_ALTITUDE_AGL_FT = 4000
 TRACK_COLOR_BANDS = [
     (1500, [37, 99, 235, 180]),
     (3000, [8, 145, 178, 180]),
@@ -417,6 +418,12 @@ def load_flight_data(csv_path: Path) -> pd.DataFrame:
     return data.sort_values("time").reset_index(drop=True)
 
 
+def limit_max_altitude_agl(data: pd.DataFrame, max_altitude_ft: int) -> pd.DataFrame:
+    if max_altitude_ft <= 0:
+        return data.copy()
+    return data[data["altitude_agl_ft"] <= float(max_altitude_ft)].copy().reset_index(drop=True)
+
+
 def interpolate_flight_paths(
     data: pd.DataFrame,
     step_seconds: int,
@@ -667,6 +674,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--lon-step", type=float, default=0.01, help="Longitude bin size in degrees.")
     parser.add_argument("--altitude-step-ft", type=int, default=1000, help="Altitude bin size in feet AGL.")
     parser.add_argument(
+        "--max-altitude-ft",
+        type=int,
+        default=DEFAULT_MAX_ALTITUDE_AGL_FT,
+        help="Maximum altitude to include in the map, in feet AGL.",
+    )
+    parser.add_argument(
         "--interpolate-step-seconds",
         type=int,
         default=5,
@@ -686,6 +699,11 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     data = load_flight_data(args.csv_path)
+    data = limit_max_altitude_agl(data, args.max_altitude_ft)
+    if data.empty:
+        raise ValueError(
+            f"No rows remain at or below {args.max_altitude_ft} ft AGL in {args.csv_path}."
+        )
     density_data = interpolate_flight_paths(
         data,
         step_seconds=max(1, args.interpolate_step_seconds),
@@ -699,10 +717,14 @@ def main() -> None:
         arrow_stride=max(1, args.arrow_stride),
     )
 
-    slider_max = int(((data["altitude_agl_ft"].max() // args.altitude_step_ft) + 1) * args.altitude_step_ft)
+    slider_max = min(
+        args.max_altitude_ft,
+        int(((data["altitude_agl_ft"].max() // args.altitude_step_ft) + 1) * args.altitude_step_ft),
+    )
     summary = (
         "This view groups OpenSky state vectors into longitude, latitude, and altitude boxes. "
-        "Each point shows one occupied box and the color gets stronger when more observations fall inside it."
+        f"Each point shows one occupied box and the color gets stronger when more observations fall inside it. "
+        f"Altitudes are shown in feet AGL and capped at {args.max_altitude_ft} ft."
     )
 
     replacements = {

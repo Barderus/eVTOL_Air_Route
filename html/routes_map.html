@@ -55,14 +55,16 @@
       combined: { color: "#111827", weight: 7, opacity: 0.95 },
       population_only: { color: "#16a34a", weight: 6, opacity: 0.9, dashArray: "10 6" },
       distance_only: { color: "#2563eb", weight: 6, opacity: 0.9 },
-      airspace_only: { color: "#dc2626", weight: 6, opacity: 0.9, dashArray: "4 8" }
+      airspace_only: { color: "#dc2626", weight: 6, opacity: 0.9, dashArray: "4 8" },
+      air_traffic_only: { color: "#9333ea", weight: 6, opacity: 0.9, dashArray: "14 6 4 6" }
     };
 
     const routeLabels = {
       combined: "Combined Cost",
       population_only: "Population Only",
       distance_only: "Distance Only",
-      airspace_only: "Airspace Only"
+      airspace_only: "Airspace Only",
+      air_traffic_only: "Air Traffic Only"
     };
 
     fetch("../geojson/routes.geojson")
@@ -85,11 +87,13 @@
             onEachFeature: function (_feature, featureLayer) {
               const totalCost = typeof p.total_cost === "number" ? p.total_cost.toFixed(3) : "n/a";
               const pathNodes = p.path_nodes ?? "n/a";
+              const trafficRowsUsed = p.traffic_rows_used ?? "n/a";
               featureLayer.bindPopup(
                 `<b>${label}</b><br>` +
                 `Cost: ${totalCost}<br>` +
                 `Nodes: ${pathNodes}<br>` +
-                `Weights: D=${p.distance_weight}, P=${p.population_weight}, A=${p.airspace_weight}`
+                `Weights: D=${p.distance_weight}, P=${p.population_weight}, A=${p.airspace_weight}, T=${p.traffic_weight ?? 0}<br>` +
+                `Traffic rows used: ${trafficRowsUsed}`
               );
             }
           });
@@ -125,6 +129,10 @@
             <div class="legend-row">
               <span class="swatch-line" style="border-top-color:#dc2626; border-top-style:dashed;"></span>
               <span>Airspace Only</span>
+            </div>
+            <div class="legend-row">
+              <span class="swatch-line" style="border-top-color:#9333ea; border-top-style:dashed;"></span>
+              <span>Air Traffic Only</span>
             </div>
           `;
           return div;
