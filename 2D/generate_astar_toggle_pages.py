@@ -33,6 +33,24 @@ ROUTE_SPECS = [
         "color": "#dc2626",
     },
     {
+        "name": "airspace_only",
+        "label": "Airspace Only",
+        "distance_weight": 0.0,
+        "population_weight": 0.0,
+        "airspace_weight": 1.0,
+        "traffic_weight": 0.0,
+        "color": "#f59e0b",
+    },
+    {
+        "name": "flight_density_only",
+        "label": "Flight Density Only",
+        "distance_weight": 0.0,
+        "population_weight": 0.0,
+        "airspace_weight": 0.0,
+        "traffic_weight": 1.0,
+        "color": "#7c3aed",
+    },
+    {
         "name": "population_only",
         "label": "Population Only",
         "distance_weight": 0.0,
@@ -49,15 +67,6 @@ ROUTE_SPECS = [
         "airspace_weight": 0.0,
         "traffic_weight": 0.0,
         "color": "#16a34a",
-    },
-    {
-        "name": "airspace_only",
-        "label": "Airspace Only",
-        "distance_weight": 0.0,
-        "population_weight": 0.0,
-        "airspace_weight": 1.0,
-        "traffic_weight": 0.0,
-        "color": "#f59e0b",
     },
 ]
 
@@ -234,6 +243,15 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     const activeRouteLayers = {{}};
     const datasetLayers = new Map();
     const dateToggle = document.getElementById("dateToggle");
+    const weekdayLabels = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+
+    function formatDatasetLabel(dateLabel) {{
+      const parsedDate = new Date(`${{dateLabel}}T00:00:00`);
+      if (Number.isNaN(parsedDate.getTime())) {{
+        return dateLabel;
+      }}
+      return `${{dateLabel}}-${{weekdayLabels[parsedDate.getDay()]}}`;
+    }}
 
     routeData.features.forEach((feature) => {{
       const properties = feature.properties || {{}};
@@ -258,7 +276,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           routeLayer.bindPopup(
             `<b>${{p.destination_label}}</b><br>` +
             `<b>Route:</b> ${{p.route_label}}<br>` +
-            `<b>Dataset:</b> ${{p.dataset_label}}<br>` +
+            `<b>Dataset:</b> ${{formatDatasetLabel(p.dataset_label)}}<br>` +
             `<b>Path nodes:</b> ${{p.path_nodes}}<br>` +
             `<b>Total cost:</b> ${{Number(p.total_cost).toFixed(4)}}<br>` +
             `<b>Weights:</b> D=${{p.distance_weight}}, P=${{p.population_weight}}, A=${{p.airspace_weight}}, T=${{p.traffic_weight}}`
@@ -268,12 +286,11 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       activeRouteLayers[routeDefinition.name] = layer;
     }});
 
-    const layerControl = L.control.layers(null, {{
-      "Combined": activeRouteLayers["combined"],
-      "Population Only": activeRouteLayers["population_only"],
-      "Distance Only": activeRouteLayers["distance_only"],
-      "Airspace Only": activeRouteLayers["airspace_only"]
-    }}, {{
+    const layerControlEntries = Object.fromEntries(
+      routeDefinitions.map((routeDefinition) => [routeDefinition.label, activeRouteLayers[routeDefinition.name]])
+    );
+
+    const layerControl = L.control.layers(null, layerControlEntries, {{
       collapsed: false
     }}).addTo(map);
 
@@ -308,7 +325,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       const button = document.createElement("button");
       button.type = "button";
       button.dataset.slug = dataset.slug;
-      button.textContent = dataset.label;
+      button.textContent = formatDatasetLabel(dataset.label);
       button.addEventListener("click", () => showDataset(dataset.slug));
       dateToggle.appendChild(button);
     }});
@@ -316,24 +333,15 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     const legend = L.control({{ position: "bottomright" }});
     legend.onAdd = function () {{
       const div = L.DomUtil.create("div", "legend-box");
+      const legendRows = routeDefinitions.map((routeDefinition) => `
+        <div class="legend-row">
+          <span class="swatch-line" style="border-top-color:${{routeDefinition.color}};"></span>
+          <span>${{routeDefinition.label}}</span>
+        </div>
+      `).join("");
       div.innerHTML = `
         <div style="font-weight:700; margin-bottom:6px;">{page_title}</div>
-        <div class="legend-row">
-          <span class="swatch-line" style="border-top-color:#dc2626;"></span>
-          <span>Combined</span>
-        </div>
-        <div class="legend-row">
-          <span class="swatch-line" style="border-top-color:#2563eb;"></span>
-          <span>Population Only</span>
-        </div>
-        <div class="legend-row">
-          <span class="swatch-line" style="border-top-color:#16a34a;"></span>
-          <span>Distance Only</span>
-        </div>
-        <div class="legend-row">
-          <span class="swatch-line" style="border-top-color:#f59e0b;"></span>
-          <span>Airspace Only</span>
-        </div>
+        ${{legendRows}}
       `;
       return div;
     }};
@@ -599,7 +607,9 @@ def write_html(destination: dict[str, object], route_geojson: dict[str, object])
         page_title=page_title,
         route_data=json.dumps(route_geojson),
         dataset_order=json.dumps([{"slug": item["slug"], "label": item["label"]} for item in DATASETS]),
-        route_definitions=json.dumps([{"name": item["name"], "label": item["label"]} for item in ROUTE_SPECS]),
+        route_definitions=json.dumps(
+            [{"name": item["name"], "label": item["label"], "color": item["color"]} for item in ROUTE_SPECS]
+        ),
         start_point=json.dumps(START),
         destination_point=json.dumps(destination),
         destination_label=destination["label"],
