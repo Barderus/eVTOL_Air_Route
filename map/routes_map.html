@@ -53,7 +53,8 @@
   ></script>
 
   <script>
-    // 1) Create map (Chicago-ish default view)
+    // Start from a neutral Chicago view, then fit to whatever route geometries
+    // are actually present in the GeoJSON.
     const map = L.map("map").setView([41.88, -87.63], 10);
 
     // 2) Base tiles
@@ -74,6 +75,8 @@
           style: function (feature) {
             const name = (feature.properties && feature.properties.name) ? feature.properties.name : "";
 
+            // Use line style, not separate layers, to compare the two
+            // algorithms directly on the same geometry stack.
             if (name === "dijkstra") {
               return {
                 color: "#1f77b4", // blue

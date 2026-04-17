@@ -113,6 +113,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   <script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
   <script src="https://unpkg.com/leaflet-polylinedecorator@1.6.0/dist/leaflet.polylineDecorator.js"></script>
   <script>
+    // Pre-bucket observations by time window so the browser only swaps arrays
+    // when the user changes the horizon.
     const windowedObservations = {observation_data};
     const bounds = {bounds};
     const timeButtons = {time_buttons};
@@ -170,6 +172,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         flightMap.get(row.icao24).push(row);
       }});
 
+      // Rebuild tracks client-side from the sampled rows so a single HTML file
+      // can support both the heat layer and the track/origin overlays.
       flightMap.forEach((flightRows, icao24) => {{
         if (flightRows.length < 2) {{
           return;
@@ -315,6 +319,8 @@ def load_flight_data(csv_path: Path) -> pd.DataFrame:
     data["lat"] = data["lat"].astype(float)
     data["lon"] = data["lon"].astype(float)
     data["baroaltitude"] = data["baroaltitude"].astype(float)
+    # Approximate AGL altitude from barometric altitude so track coloring stays
+    # meaningful near the airport surface environment.
     data["altitude_agl_ft"] = (data["baroaltitude"] * METERS_TO_FEET - GROUND_ELEVATION_FT_MSL).clip(lower=0.0)
     data["icao24"] = data["icao24"].astype(str)
     return data
@@ -361,6 +367,8 @@ def main() -> None:
     track_stride = max(1, args.track_stride)
     arrow_repeat = max(40, args.arrow_stride * 12)
 
+    # Sample each flight independently so dense tracks stay legible without
+    # erasing shorter flights from the visualization.
     sampled_data = data[data.groupby("icao24").cumcount() % track_stride == 0].reset_index(drop=True)
     windowed_observations = build_windowed_observations(sampled_data)
 

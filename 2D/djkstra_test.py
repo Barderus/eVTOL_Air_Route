@@ -2,6 +2,8 @@ import networkx as nx
 import matplotlib.pyplot as plt
 
 
+# MultiGraph keeps room for multiple parallel road segments between the same
+# towns, even though this toy example usually adds one edge per pair.
 chicago = nx.MultiGraph()
 
 chicago.add_nodes_from(["Bolingbrook", "Romeoville", "Woodridge", "Downers Grove", "Lisle", "Naperville", "Darien",
@@ -96,7 +98,8 @@ path = nx.dijkstra_path(chicago, "Bolingbrook", "Chicago", weight="weight")
 step_costs = []
 total = 0
 for u, v in zip(path, path[1:]):
-    # To pick the minimum weight between the nodes
+    # Dijkstra returns node order; for a MultiGraph we still need the lightest
+    # concrete edge between each pair when summarizing the path cost.
     w = min(data.get("weight", 1) for data in chicago.get_edge_data(u, v).values())
     step_costs.append((u, v, w))
     total += w

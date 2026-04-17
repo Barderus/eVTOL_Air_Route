@@ -20,6 +20,8 @@ PINGREE_GROVE_LON = -88.413416
 
 
 def resolve_trino_path(trino_path: Path) -> Path:
+    # Accept either a direct JAR path or a containing folder so local setup can
+    # stay flexible across machines.
     if trino_path.is_file():
         return trino_path
 
@@ -56,6 +58,8 @@ def resolve_trino_path(trino_path: Path) -> Path:
 
 
 def get_day_window(date_text: str, timezone_name: str) -> tuple[int, int]:
+    # Interpret the requested date in local time first, then hand UTC epochs to
+    # Trino so the SQL stays unambiguous.
     timezone = ZoneInfo(timezone_name)
     day_start = datetime.strptime(date_text, "%Y-%m-%d").replace(tzinfo=timezone)
     day_end = day_start + timedelta(days=1)
@@ -63,6 +67,8 @@ def get_day_window(date_text: str, timezone_name: str) -> tuple[int, int]:
 
 
 def get_hour_window_utc(start_epoch: int, end_epoch: int) -> tuple[str, str]:
+    # Trino partition pruning works at the UTC hour level, so round the day
+    # window outward to matching hour buckets.
     start_dt = datetime.fromtimestamp(start_epoch, tz=UTC).replace(minute=0, second=0, microsecond=0)
     end_dt = datetime.fromtimestamp(end_epoch, tz=UTC).replace(minute=0, second=0, microsecond=0)
     start_hour = int(start_dt.timestamp())
@@ -108,6 +114,8 @@ def run_trino_query(
     output_path: Path,
 ) -> None:
     resolved_trino_path = resolve_trino_path(trino_path)
+    # Shell out to the Trino CLI rather than bundling a client dependency into
+    # the repo.
     command = [
         "java",
         "-jar",
@@ -206,6 +214,8 @@ def main() -> None:
     west = args.west if args.west is not None else west
     east = args.east if args.east is not None else east
 
+    # Materialize one concrete SQL query after all time, altitude, and bbox
+    # parameters have been resolved from CLI input.
     query_text = build_query(
         args.query_file,
         {

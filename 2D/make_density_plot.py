@@ -26,6 +26,8 @@ def detect_csv_encoding(csv_path: Path) -> str:
 
 def load_flight_data(csv_path: Path) -> pd.DataFrame:
     data = pd.read_csv(csv_path, encoding=detect_csv_encoding(csv_path))
+    # Keep this plot intentionally simple: it counts observations, not unique
+    # aircraft, so repeated passes naturally appear hotter.
     data = data.dropna(subset=["lat", "lon", "baroaltitude"]).copy()
     data["time"] = pd.to_numeric(data["time"], errors="coerce")
     data["lat"] = pd.to_numeric(data["lat"], errors="coerce")
