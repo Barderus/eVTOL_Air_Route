@@ -127,6 +127,8 @@ def load_traffic_density(grid: gpd.GeoDataFrame, traffic_csv_path: Path) -> tupl
     bounds_west, bounds_south, bounds_east, bounds_north = grid.total_bounds
     csv_encoding = detect_csv_encoding(traffic_csv_path)
 
+    # Read the OpenSky export in chunks so dense 1-second datasets do not have
+    # to fit in memory all at once.
     for chunk in pd.read_csv(
         traffic_csv_path,
         usecols=["lat", "lon"],
@@ -186,6 +188,8 @@ def build_graph(grid: gpd.GeoDataFrame) -> tuple[nx.Graph, gpd.GeoSeries, np.nda
         for j in sindex.intersection(geom.bounds):
             if j <= i:
                 continue
+            # Touching polygons include corner contact, which creates the
+            # diagonal moves used by the shortest-path search.
             if geom.touches(geoms.iloc[j]):
                 graph.add_edge(i, j)
 
@@ -216,6 +220,8 @@ def assign_edge_weights(
         dx = cent_x[u] - cent_x[v]
         dy = cent_y[u] - cent_y[v]
         distance_norm = math.hypot(dx, dy) / max_edge_distance
+        # The grid stores cost on cells, so each traversed edge uses the mean of
+        # the two endpoint cells to turn those node costs into edge weights.
         population_norm = 0.5 * (city_risk_norm[u] + city_risk_norm[v])
         airspace_norm = 0.5 * (airspace_risk_norm[u] + airspace_risk_norm[v])
         traffic_norm = 0.5 * (traffic_risk_norm[u] + traffic_risk_norm[v])
@@ -251,6 +257,8 @@ def make_heuristic(distance_weight: float, cent_x: np.ndarray, cent_y: np.ndarra
     if distance_weight <= 0:
         return lambda _u, _v: 0.0
 
+    # Only the distance term is admissible as an A* heuristic because the other
+    # normalized costs are non-negative penalties learned from the cells.
     def heuristic(u: int, v: int) -> float:
         dx = cent_x[u] - cent_x[v]
         dy = cent_y[u] - cent_y[v]
@@ -267,6 +275,8 @@ def main() -> None:
     args = parse_args()
     grid = gpd.read_file(args.grid).reset_index(drop=True)
 
+    # Pipeline: grid costs -> observed traffic density -> weighted graph -> A*
+    # routes exported for map display.
     traffic_count, traffic_density, traffic_input_rows, traffic_matched_rows = load_traffic_density(
         grid, args.traffic_csv
     )

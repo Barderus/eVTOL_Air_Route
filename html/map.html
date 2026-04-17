@@ -143,7 +143,8 @@
 
   // Styling helpers
 
-  // Existing combined logic (your original)
+  // Combined mode keeps the winning driver from the preprocessing step, so the
+  // grid can show whether population or airport risk dominates each cell.
   function colorCombined(feature) {
     const p = feature.properties || {};
 
@@ -205,7 +206,8 @@
     };
   }
 
-  // Load Grid GeoJSON once and build 3 toggleable layers
+  // Load the grid once, then render three alternate styles from the same
+  // feature set so the toggle only swaps presentation.
   let gridLayerCombined = null;
   let gridLayerAir = null;
   let gridLayerPop = null;
@@ -235,7 +237,8 @@
         });
       }
 
-      // Build three layers from the SAME GeoJSON data
+      // Build three layers from the same GeoJSON data so click popups and cell
+      // boundaries stay identical across modes.
       gridLayerCombined = L.geoJSON(data, {
         style: makeGridStyle(colorCombined),
         renderer: L.canvas(),
@@ -268,6 +271,7 @@
       }
 
       function showOnly(layerToShow, activeBtn) {
+        // Keep exactly one styling layer mounted at a time.
         if (gridLayerCombined && mymap.hasLayer(gridLayerCombined)) mymap.removeLayer(gridLayerCombined);
         if (gridLayerAir && mymap.hasLayer(gridLayerAir)) mymap.removeLayer(gridLayerAir);
         if (gridLayerPop && mymap.hasLayer(gridLayerPop)) mymap.removeLayer(gridLayerPop);

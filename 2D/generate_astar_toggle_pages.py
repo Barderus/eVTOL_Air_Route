@@ -22,6 +22,8 @@ POPULATION_WEIGHT = 0.9
 AIRSPACE_WEIGHT = 1.4
 TRAFFIC_WEIGHT = 1.0
 
+# These specs drive both the A* edge weighting and the layer metadata emitted
+# into the self-contained HTML pages.
 ROUTE_SPECS = [
     {
         "name": "combined",
@@ -223,6 +225,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   ></script>
   <script>
     const map = L.map("map").setView([41.88, -87.63], 10);
+    // Embed every precomputed route so the page can switch datasets instantly
+    // without fetching separate GeoJSON files.
     const routeData = {route_data};
     const datasetOrder = {dataset_order};
     const startPoint = {start_point};
@@ -241,6 +245,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     const allBounds = L.latLngBounds([startPoint.lat, startPoint.lon], [destinationPoint.lat, destinationPoint.lon]);
     const routeDefinitions = {route_definitions};
     const activeRouteLayers = {{}};
+    // Index features by dataset slug and route name so a date switch only swaps
+    // the visible route geometry, not the whole map.
     const datasetLayers = new Map();
     const dateToggle = document.getElementById("dateToggle");
     const weekdayLabels = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
@@ -394,6 +400,8 @@ def build_graph(grid: gpd.GeoDataFrame) -> tuple[nx.Graph, gpd.GeoSeries, np.nda
         for j in sindex.intersection(geom.bounds):
             if j <= i:
                 continue
+            # `touches` keeps both edge-sharing and corner-sharing neighbors, so
+            # diagonal steps are legal moves in the routing graph.
             if geom.touches(geoms.iloc[j]):
                 graph.add_edge(i, j)
 
@@ -416,6 +424,8 @@ def node_for_point(
         if geoms.iloc[index].contains(point):
             return int(index)
 
+    # Origins and destinations can land on a cell boundary, so fall back to the
+    # nearest centroid instead of failing the route build.
     point_m = gpd.GeoSeries([point], crs="EPSG:4326").to_crs("EPSG:3857").iloc[0]
     return int(centroids_m.distance(point_m).idxmin())
 
@@ -465,6 +475,8 @@ def load_traffic_counts(csv_path: Path, grid: gpd.GeoDataFrame) -> np.ndarray:
     data["lon"] = pd.to_numeric(data["lon"], errors="coerce")
     data = data.dropna(subset=["lat", "lon"])
 
+    # Convert raw OpenSky observations into per-cell traffic counts for the
+    # dataset date represented by this route page.
     observations = gpd.GeoDataFrame(
         data[["lat", "lon"]].copy(),
         geometry=gpd.points_from_xy(data["lon"], data["lat"]),
@@ -504,6 +516,8 @@ def assign_route_edge_weights(
         dx = cent_x[u] - cent_x[v]
         dy = cent_y[u] - cent_y[v]
         distance_norm = math.hypot(dx, dy) / max_edge_distance
+        # Treat the edge as inheriting the average risk of the two cells it
+        # connects, which keeps node-based cost layers compatible with A*.
         population_norm = 0.5 * (city_risk_norm[u] + city_risk_norm[v])
         airspace_norm = 0.5 * (airspace_risk_norm[u] + airspace_risk_norm[v])
         traffic_norm = 0.5 * (traffic_risk_norm[u] + traffic_risk_norm[v])
@@ -538,6 +552,8 @@ def build_route_features() -> dict[str, gpd.GeoDataFrame]:
     route_rows_by_destination: dict[str, list[dict[str, object]]] = {destination["slug"]: [] for destination in DESTINATIONS}
     route_geometries_by_destination: dict[str, list[LineString]] = {destination["slug"]: [] for destination in DESTINATIONS}
 
+    # Precompute every destination/date/preset combination once so the HTML
+    # pages only need to toggle prebuilt route features.
     for dataset in DATASETS:
         if not dataset["csv_path"].exists():
             raise SystemExit(f"Traffic CSV not found: {dataset['csv_path']}")
@@ -578,10 +594,7 @@ def build_route_features() -> dict[str, gpd.GeoDataFrame]:
                         "color": spec["color"],
                     }
                 )
-                if spec["name"] == "distance_only":
-                    geometry = direct_route_line(START, destination)
-                else:
-                    geometry = route_line(grid, path)
+                geometry = route_line(grid, path)
                 route_geometries_by_destination[destination["slug"]].append(geometry)
                 print(
                     f"{destination['slug']} | {dataset['slug']} | {spec['name']}:",
@@ -603,6 +616,7 @@ def build_route_features() -> dict[str, gpd.GeoDataFrame]:
 def write_html(destination: dict[str, object], route_geojson: dict[str, object]) -> None:
     page_title = f"Clow To {destination['label']} A* Route"
     output_path = HTML_OUTPUT / f"clow_to_{destination['slug']}_astar.html"
+    # Emit a single self-contained HTML artifact per destination.
     html = HTML_TEMPLATE.format(
         page_title=page_title,
         route_data=json.dumps(route_geojson),
