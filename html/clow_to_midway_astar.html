@@ -111,6 +111,15 @@
     const activeRouteLayers = {};
     const datasetLayers = new Map();
     const dateToggle = document.getElementById("dateToggle");
+    const weekdayLabels = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+
+    function formatDatasetLabel(dateLabel) {
+      const parsedDate = new Date(`${dateLabel}T00:00:00`);
+      if (Number.isNaN(parsedDate.getTime())) {
+        return dateLabel;
+      }
+      return `${dateLabel}-${weekdayLabels[parsedDate.getDay()]}`;
+    }
 
     routeData.features.forEach((feature) => {
       const properties = feature.properties || {};
@@ -135,7 +144,7 @@
           routeLayer.bindPopup(
             `<b>${p.destination_label}</b><br>` +
             `<b>Route:</b> ${p.route_label}<br>` +
-            `<b>Dataset:</b> ${p.dataset_label}<br>` +
+            `<b>Dataset:</b> ${formatDatasetLabel(p.dataset_label)}<br>` +
             `<b>Path nodes:</b> ${p.path_nodes}<br>` +
             `<b>Total cost:</b> ${Number(p.total_cost).toFixed(4)}<br>` +
             `<b>Weights:</b> D=${p.distance_weight}, P=${p.population_weight}, A=${p.airspace_weight}, T=${p.traffic_weight}`
@@ -185,7 +194,7 @@
       const button = document.createElement("button");
       button.type = "button";
       button.dataset.slug = dataset.slug;
-      button.textContent = dataset.label;
+      button.textContent = formatDatasetLabel(dataset.label);
       button.addEventListener("click", () => showDataset(dataset.slug));
       dateToggle.appendChild(button);
     });

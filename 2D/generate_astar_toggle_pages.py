@@ -441,6 +441,15 @@ def route_line(grid: gpd.GeoDataFrame, path: list[int], simplify_tolerance_m: fl
     return line
 
 
+def direct_route_line(start: dict[str, object], destination: dict[str, object]) -> LineString:
+    return LineString(
+        [
+            Point(float(start["lon"]), float(start["lat"])),
+            Point(float(destination["lon"]), float(destination["lat"])),
+        ]
+    )
+
+
 def load_traffic_counts(csv_path: Path, grid: gpd.GeoDataFrame) -> np.ndarray:
     data = pd.read_csv(csv_path, encoding=detect_csv_encoding(csv_path))
     data = data.dropna(subset=["lat", "lon"]).copy()
@@ -561,10 +570,11 @@ def build_route_features() -> dict[str, gpd.GeoDataFrame]:
                         "color": spec["color"],
                     }
                 )
-                simplify_tolerance_m = 1500.0 if spec["name"] == "distance_only" else 0.0
-                route_geometries_by_destination[destination["slug"]].append(
-                    route_line(grid, path, simplify_tolerance_m=simplify_tolerance_m)
-                )
+                if spec["name"] == "distance_only":
+                    geometry = direct_route_line(START, destination)
+                else:
+                    geometry = route_line(grid, path)
+                route_geometries_by_destination[destination["slug"]].append(geometry)
                 print(
                     f"{destination['slug']} | {dataset['slug']} | {spec['name']}:",
                     f"nodes={len(path)}",
