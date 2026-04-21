@@ -6,92 +6,148 @@
   <title>Greater Chicago Flight Density</title>
   <link
     rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    href="https://unpkg.com/leaflet@1.6.0/dist/leaflet.css"
+    integrity="sha512-xwE/Az9zrjBIphAcBb3F6JVqxf46+CDLwfLMHloNu6KEQCAWi6HcDUbeOfBIptF7tcCzusKFjFw2yuvEpDL9wQ=="
     crossorigin=""
   />
   <style>
+    :root {
+      --surface: #ffffff;
+      --surface-soft: #f5f7f8;
+      --line: #cfd7dd;
+      --text: #172026;
+      --muted: #5f6f7a;
+      --active: #165a72;
+    }
+
+    * { box-sizing: border-box; }
+
     html, body {
       height: 100%;
       margin: 0;
-      font-family: Arial, sans-serif;
-      background: #0d1117;
+      color: var(--text);
+      font-family: Arial, Helvetica, sans-serif;
+      background: var(--surface-soft);
+      overflow: hidden;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
     }
 
     #map {
-      width: 100vw;
-      height: 100vh;
+      flex: 1 1 auto;
+      width: 100%;
+      height: calc(100vh - 59px);
+      min-height: 360px;
     }
 
-    .panel {
-      position: absolute;
-      top: 12px;
-      left: 12px;
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--line);
+      background: var(--surface);
       z-index: 1000;
-      width: 320px;
-      padding: 14px 16px;
-      border-radius: 10px;
-      background: rgba(255, 255, 255, 0.95);
-      box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
-      line-height: 1.35;
     }
 
-    .panel h1 {
-      margin: 0 0 8px;
-      font-size: 18px;
+    .title-block { min-width: 250px; }
+
+    h1 {
+      margin: 0;
+      font-size: 17px;
+      font-weight: 700;
+      line-height: 1.2;
     }
 
-    .panel p {
-      margin: 0 0 8px;
-      font-size: 13px;
-      color: #334155;
+    .status {
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.25;
+      white-space: nowrap;
+    }
+
+    .control-strip {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 10px;
+      flex-wrap: wrap;
     }
 
     .metric {
       display: inline-block;
-      margin: 2px 6px 0 0;
+      margin: 2px 0 0 6px;
       padding: 4px 8px;
-      border-radius: 999px;
+      border-radius: 7px;
       background: #e2e8f0;
       font-size: 12px;
       color: #0f172a;
     }
 
-    .time-toggle {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      margin-top: 10px;
+    .segmented {
+      display: inline-grid;
+      min-height: 38px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      overflow: hidden;
+      background: var(--surface);
     }
 
-    .time-toggle button {
+    .layer-toggle { grid-template-columns: repeat(3, minmax(86px, 1fr)); }
+    .time-toggle { grid-template-columns: repeat(6, minmax(54px, 1fr)); }
+
+    .segmented button {
+      min-width: 0;
+      padding: 8px 12px;
       border: 0;
-      border-radius: 999px;
-      padding: 6px 10px;
-      background: #cbd5e1;
-      color: #0f172a;
-      font-size: 12px;
+      border-right: 1px solid var(--line);
+      color: var(--text);
+      background: transparent;
+      font: inherit;
+      font-size: 13px;
       cursor: pointer;
     }
 
-    .time-toggle button.active {
-      background: #0f172a;
-      color: #f8fafc;
+    .segmented button:last-child { border-right: 0; }
+    .segmented button:hover { background: #eef3f5; }
+    .segmented button.active {
+      color: #ffffff;
+      background: var(--active);
+    }
+
+    @media (max-width: 980px) {
+      .toolbar { align-items: stretch; flex-direction: column; gap: 9px; }
+      .status { white-space: normal; }
+      .control-strip { justify-content: stretch; }
+      .segmented { width: 100%; }
+      .layer-toggle { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .time-toggle { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .segmented button { padding-inline: 6px; font-size: 12px; }
+      #map { height: calc(100vh - 154px); }
     }
   </style>
 </head>
 <body>
-  <div id="map"></div>
-  <div class="panel">
-    <h1>Greater Chicago Flight Density</h1>
-    <div class="metric">Rows: 43341</div>
-    <div class="metric">Flights: 992</div>
-    <div class="metric">Track stride: 3</div>
-    <div class="metric">Arrow stride: 18</div>
-    <div class="time-toggle" id="timeToggle"></div>
-  </div>
+  <header class="toolbar">
+    <div class="title-block">
+      <h1>Greater Chicago Flight Density</h1>
+      <div id="status" class="status">Select a layer and traffic window.</div>
+    </div>
+    <div class="control-strip">
+      <div class="metric">Rows: 43341</div>
+      <div class="metric">Flights: 992</div>
+      <div class="segmented layer-toggle" id="layerToggle" role="group" aria-label="Density layer"></div>
+      <div class="segmented time-toggle" id="timeToggle" role="group" aria-label="Traffic window"></div>
+    </div>
+  </header>
+  <main id="map" aria-label="Greater Chicago flight density map"></main>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="https://unpkg.com/leaflet@1.6.0/dist/leaflet.js" integrity="sha512-gZwIG9x3wUXg2hdXF6+rVkLF/0Vi9U8D2Ntg4Ga5I5BZpVkVxlJWbSQtXPSiUTtC0TjtGOmxa1AJPuV0CPthew==" crossorigin=""></script>
   <script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
   <script src="https://unpkg.com/leaflet-polylinedecorator@1.6.0/dist/leaflet.polylineDecorator.js"></script>
   <script>
@@ -99,12 +155,20 @@
     const bounds = [[41.52520751953125, -88.41341192072088], [42.08834373344809, -87.57336283839027]];
     const timeButtons = [1, 3, 6, 9, 12, 24];
 
+    const STUDY_BOUNDS = L.latLngBounds(
+      [41.48, -88.34],
+      [42.21, -87.52]
+    );
     const map = L.map("map", {
+      center: [41.84, -87.93],
+      zoom: 10,
+      maxBounds: STUDY_BOUNDS.pad(0.04),
+      maxBoundsViscosity: 0.9,
       preferCanvas: true,
       zoomSnap: 0.25
     });
 
-    map.fitBounds(bounds, { padding: [20, 20] });
+    map.fitBounds(STUDY_BOUNDS, { padding: [20, 20] });
 
     L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
       attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
@@ -128,6 +192,15 @@
     const trackLayer = L.layerGroup();
     const originLayer = L.layerGroup();
     const timeToggle = document.getElementById("timeToggle");
+    const layerToggle = document.getElementById("layerToggle");
+    const statusEl = document.getElementById("status");
+    const layerDefinitions = [
+      { name: "heat", label: "Heatmap", layer: heatLayer },
+      { name: "tracks", label: "Tracks", layer: trackLayer },
+      { name: "origins", label: "Origins", layer: originLayer }
+    ];
+    let activeLayerName = "heat";
+    let activeHours = 1;
 
     function pickTrackColor(meanAltitude) {
       if (meanAltitude < 1500) return "#2563eb";
@@ -209,10 +282,44 @@
     }
 
     function setActiveButton(hours) {
+      activeHours = hours;
       Array.from(timeToggle.querySelectorAll("button")).forEach((button) => {
         button.classList.toggle("active", Number(button.dataset.hours) === hours);
       });
+      updateStatus();
     }
+
+    function showLayer(layerName) {
+      activeLayerName = layerName;
+      layerDefinitions.forEach((definition) => {
+        if (definition.name === layerName) {
+          definition.layer.addTo(map);
+        } else {
+          map.removeLayer(definition.layer);
+        }
+      });
+
+      Array.from(layerToggle.querySelectorAll("button")).forEach((button) => {
+        button.classList.toggle("active", button.dataset.layer === layerName);
+      });
+      updateStatus();
+    }
+
+    function updateStatus() {
+      const layerDefinition = layerDefinitions.find((definition) => definition.name === activeLayerName);
+      if (statusEl && layerDefinition) {
+        statusEl.textContent = layerDefinition.label + " layer, " + activeHours + "h traffic window";
+      }
+    }
+
+    layerDefinitions.forEach((definition) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.layer = definition.name;
+      button.textContent = definition.label;
+      button.addEventListener("click", () => showLayer(definition.name));
+      layerToggle.appendChild(button);
+    });
 
     timeButtons.forEach((hours) => {
       const button = document.createElement("button");
@@ -242,23 +349,11 @@
       fillOpacity: 0.95
     }).bindPopup("<b>Midway International Airport</b>");
 
-    heatLayer.addTo(map);
-    trackLayer.addTo(map);
-    originLayer.addTo(map);
     ohare.addTo(map);
     midway.addTo(map);
 
-    L.control.layers(null, {
-      "Density Heatmap": heatLayer,
-      "Flight Tracks": trackLayer,
-      "Flight Origins": originLayer,
-      "O'Hare": ohare,
-      "Midway": midway
-    }, {
-      collapsed: false
-    }).addTo(map);
-
     drawForHours(1);
+    showLayer("heat");
     setActiveButton(1);
   </script>
 </body>

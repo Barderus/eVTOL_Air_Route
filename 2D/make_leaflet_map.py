@@ -24,8 +24,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   <title>Greater Chicago Flight Density</title>
   <link
     rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    href="https://unpkg.com/leaflet@1.6.0/dist/leaflet.css"
+    integrity="sha512-xwE/Az9zrjBIphAcBb3F6JVqxf46+CDLwfLMHloNu6KEQCAWi6HcDUbeOfBIptF7tcCzusKFjFw2yuvEpDL9wQ=="
     crossorigin=""
   />
   <style>
@@ -109,7 +109,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <div class="time-toggle" id="timeToggle"></div>
   </div>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="https://unpkg.com/leaflet@1.6.0/dist/leaflet.js" integrity="sha512-gZwIG9x3wUXg2hdXF6+rVkLF/0Vi9U8D2Ntg4Ga5I5BZpVkVxlJWbSQtXPSiUTtC0TjtGOmxa1AJPuV0CPthew==" crossorigin=""></script>
   <script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
   <script src="https://unpkg.com/leaflet-polylinedecorator@1.6.0/dist/leaflet.polylineDecorator.js"></script>
   <script>
@@ -117,12 +117,20 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     const bounds = {bounds};
     const timeButtons = {time_buttons};
 
+    const STUDY_BOUNDS = L.latLngBounds(
+      [41.48, -88.34],
+      [42.21, -87.52]
+    );
     const map = L.map("map", {{
+      center: [41.84, -87.93],
+      zoom: 10,
+      maxBounds: STUDY_BOUNDS.pad(0.04),
+      maxBoundsViscosity: 0.9,
       preferCanvas: true,
       zoomSnap: 0.25
     }});
 
-    map.fitBounds(bounds, {{ padding: [20, 20] }});
+    map.fitBounds(STUDY_BOUNDS, {{ padding: [20, 20] }});
 
     L.tileLayer("https://{{s}}.basemaps.cartocdn.com/light_all/{{z}}/{{x}}/{{y}}{{r}}.png", {{
       attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
