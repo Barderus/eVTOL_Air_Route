@@ -12,7 +12,7 @@ from shapely.geometry import LineString, Point
 
 
 ROOT = Path(__file__).resolve().parent.parent
-GRID_PATH = ROOT / "geojson" / "risk_grid_v5.geojson"
+GRID_PATH = ROOT / "geojson" / "risk_grid_v6.geojson"
 OPENSKY_OUTPUT = ROOT / "opensky" / "output"
 GEOJSON_OUTPUT = ROOT / "geojson"
 HTML_OUTPUT = ROOT / "html"
@@ -59,6 +59,15 @@ ROUTE_SPECS = [
         "traffic_weight": 0.0,
         "color": "#f59e0b",
     },
+    {
+        "name": "air_traffic_only",
+        "label": "Air Flight Density Only",
+        "distance_weight": 0.0,
+        "population_weight": 0.0,
+        "airspace_weight": 0.0,
+        "traffic_weight": 1.0,
+        "color": "#9333ea",
+    },
 ]
 
 START = {
@@ -91,32 +100,32 @@ DESTINATIONS = [
 DATASETS = [
     {
         "slug": "2026-03-07",
-        "label": "2026-03-07",
+        "label": "Sat 2026-03-07",
         "csv_path": OPENSKY_OUTPUT / "ohare_2026-03-07_1s_15nm_bbox.csv",
     },
     {
         "slug": "2026-03-09",
-        "label": "2026-03-09",
+        "label": "Mon 2026-03-09",
         "csv_path": OPENSKY_OUTPUT / "ohare_2026-03-09_1s_15nm_bbox.csv",
     },
     {
         "slug": "2026-01-10",
-        "label": "2026-01-10",
+        "label": "Sat 2026-01-10",
         "csv_path": OPENSKY_OUTPUT / "ohare_2026-01-10_1s_15nm_bbox.csv",
     },
     {
         "slug": "2026-01-12",
-        "label": "2026-01-12",
+        "label": "Mon 2026-01-12",
         "csv_path": OPENSKY_OUTPUT / "ohare_2026-01-12_1s_15nm_bbox.csv",
     },
     {
         "slug": "2025-07-14",
-        "label": "2025-07-14",
+        "label": "Mon 2025-07-14",
         "csv_path": OPENSKY_OUTPUT / "ohare_2025-07-14_1s_15nm_bbox.csv",
     },
     {
         "slug": "2025-07-12",
-        "label": "2025-07-12",
+        "label": "Sat 2025-07-12",
         "csv_path": OPENSKY_OUTPUT / "ohare_2025-07-12_1s_15nm_bbox.csv",
     },
 ]
@@ -129,56 +138,113 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   <title>{page_title}</title>
   <link
     rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    href="https://unpkg.com/leaflet@1.6.0/dist/leaflet.css"
+    integrity="sha512-xwE/Az9zrjBIphAcBb3F6JVqxf46+CDLwfLMHloNu6KEQCAWi6HcDUbeOfBIptF7tcCzusKFjFw2yuvEpDL9wQ=="
     crossorigin=""
   />
   <style>
-    html, body {{ height: 100%; margin: 0; }}
-    #map {{ height: 100%; width: 100%; }}
-
-    .date-panel {{
-      position: absolute;
-      top: 12px;
-      left: 12px;
-      z-index: 1000;
-      background: white;
-      padding: 10px 12px;
-      border-radius: 8px;
-      box-shadow: 0 1px 8px rgba(0,0,0,0.2);
-      font-family: Arial, sans-serif;
-      font-size: 13px;
-      line-height: 1.4;
-      max-width: 360px;
+    :root {{
+      --surface: #ffffff;
+      --surface-soft: #f5f7f8;
+      --line: #cfd7dd;
+      --text: #172026;
+      --muted: #5f6f7a;
+      --active: #165a72;
     }}
 
-    .date-toggle {{
+    * {{ box-sizing: border-box; }}
+
+    html,
+    body {{
+      height: 100%;
+      margin: 0;
+      color: var(--text);
+      font-family: Arial, Helvetica, sans-serif;
+      overflow: hidden;
+    }}
+
+    body {{
       display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      margin-top: 8px;
+      flex-direction: column;
+      background: var(--surface-soft);
     }}
 
-    .date-toggle button {{
-      border: 0;
-      border-radius: 999px;
-      padding: 6px 10px;
-      background: #cbd5e1;
-      color: #0f172a;
+    .toolbar {{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--line);
+      background: var(--surface);
+      z-index: 1000;
+    }}
+
+    .title-block {{ min-width: 220px; }}
+
+    h1 {{
+      margin: 0;
+      font-size: 17px;
+      font-weight: 700;
+      line-height: 1.2;
+    }}
+
+    .status {{
+      margin-top: 2px;
+      color: var(--muted);
       font-size: 12px;
+      line-height: 1.25;
+      white-space: nowrap;
+    }}
+
+    .control-strip {{
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 10px;
+      flex-wrap: wrap;
+    }}
+
+    .segmented {{
+      display: inline-grid;
+      min-height: 38px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      overflow: hidden;
+      background: var(--surface);
+    }}
+
+    .route-toggle {{ grid-template-columns: repeat(5, minmax(96px, 1fr)); }}
+    .date-toggle {{ grid-template-columns: repeat(6, minmax(86px, 1fr)); }}
+
+    .segmented button {{
+      min-width: 0;
+      padding: 8px 12px;
+      border: 0;
+      border-right: 1px solid var(--line);
+      color: var(--text);
+      background: transparent;
+      font: inherit;
+      font-size: 13px;
       cursor: pointer;
     }}
 
-    .date-toggle button.active {{
-      background: #0f172a;
-      color: #f8fafc;
+    .segmented button:last-child {{ border-right: 0; }}
+    .segmented button:hover {{ background: #eef3f5; }}
+    .segmented button.active {{ color: #ffffff; background: var(--active); }}
+
+    #map {{
+      flex: 1 1 auto;
+      width: 100%;
+      height: calc(100vh - 59px);
+      min-height: 360px;
     }}
 
     .legend-box {{
       background: white;
       padding: 10px 12px;
-      border-radius: 8px;
-      box-shadow: 0 1px 8px rgba(0,0,0,0.2);
+      border-radius: 7px;
+      box-shadow: 0 6px 18px rgba(23, 32, 38, 0.14);
       font-family: Arial, sans-serif;
       font-size: 13px;
       line-height: 1.4;
@@ -197,23 +263,48 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       border-top: 4px solid #000;
       display: inline-block;
     }}
+
+    @media (max-width: 920px) {{
+      .toolbar {{ align-items: stretch; flex-direction: column; gap: 9px; }}
+      .status {{ white-space: normal; }}
+      .control-strip {{ justify-content: stretch; }}
+      .segmented {{ width: 100%; }}
+      .route-toggle {{ grid-template-columns: repeat(5, minmax(0, 1fr)); }}
+      .date-toggle {{ grid-template-columns: repeat(3, minmax(0, 1fr)); }}
+      .segmented button {{ padding-inline: 6px; font-size: 12px; }}
+      #map {{ height: calc(100vh - 151px); }}
+    }}
   </style>
 </head>
 <body>
-  <div id="map"></div>
-  <div class="date-panel">
-    <div style="font-weight:700;">{page_title}</div>
-    <div>Select the traffic dataset below. Route layers stay as Leaflet checkboxes on the map.</div>
-    <div class="date-toggle" id="dateToggle"></div>
-  </div>
+  <header class="toolbar">
+    <div class="title-block">
+      <h1>{page_title}</h1>
+      <div id="status" class="status">Select a route mode and traffic date.</div>
+    </div>
+    <div class="control-strip">
+      <div class="segmented route-toggle" id="routeToggle" role="group" aria-label="Route mode"></div>
+      <div class="segmented date-toggle" id="dateToggle" role="group" aria-label="Traffic dataset"></div>
+    </div>
+  </header>
+  <main id="map" aria-label="{page_title} map"></main>
 
   <script
-    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    src="https://unpkg.com/leaflet@1.6.0/dist/leaflet.js"
+    integrity="sha512-gZwIG9x3wUXg2hdXF6+rVkLF/0Vi9U8D2Ntg4Ga5I5BZpVkVxlJWbSQtXPSiUTtC0TjtGOmxa1AJPuV0CPthew=="
     crossorigin=""
   ></script>
   <script>
-    const map = L.map("map").setView([41.88, -87.63], 10);
+    const STUDY_BOUNDS = L.latLngBounds(
+      [41.48, -88.34],
+      [42.21, -87.52]
+    );
+    const map = L.map("map", {{
+      center: [41.84, -87.93],
+      zoom: 10,
+      maxBounds: STUDY_BOUNDS.pad(0.04),
+      maxBoundsViscosity: 0.9
+    }});
     const routeData = {route_data};
     const datasetOrder = {dataset_order};
     const startPoint = {start_point};
@@ -234,6 +325,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     const activeRouteLayers = {{}};
     const datasetLayers = new Map();
     const dateToggle = document.getElementById("dateToggle");
+    const routeToggle = document.getElementById("routeToggle");
+    const statusEl = document.getElementById("status");
+    let activeRouteName = "combined";
 
     routeData.features.forEach((feature) => {{
       const properties = feature.properties || {{}};
@@ -268,15 +362,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       activeRouteLayers[routeDefinition.name] = layer;
     }});
 
-    const layerControl = L.control.layers(null, {{
-      "Combined": activeRouteLayers["combined"],
-      "Population Only": activeRouteLayers["population_only"],
-      "Distance Only": activeRouteLayers["distance_only"],
-      "Airspace Only": activeRouteLayers["airspace_only"]
-    }}, {{
-      collapsed: false
-    }}).addTo(map);
-
     function setActiveDateButton(activeSlug) {{
       Array.from(dateToggle.querySelectorAll("button")).forEach((button) => {{
         button.classList.toggle("active", button.dataset.slug === activeSlug);
@@ -287,22 +372,46 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       const routeLayerMap = datasetLayers.get(datasetSlug) || {{}};
       Object.entries(activeRouteLayers).forEach(([routeName, layer]) => {{
         const feature = routeLayerMap[routeName];
-        const wasVisible = map.hasLayer(layer);
         layer.clearLayers();
         if (feature) {{
           layer.addData(feature);
           allBounds.extend(layer.getBounds());
         }}
-        if (wasVisible && feature) {{
+      }});
+
+      setActiveDateButton(datasetSlug);
+      showRoute(activeRouteName);
+    }}
+
+    function showRoute(routeName) {{
+      activeRouteName = routeName;
+      Object.entries(activeRouteLayers).forEach(([name, layer]) => {{
+        if (name === routeName && layer.getLayers().length > 0) {{
           layer.addTo(map);
+        }} else {{
+          map.removeLayer(layer);
         }}
       }});
 
-      if (!map.hasLayer(activeRouteLayers["combined"])) {{
-        activeRouteLayers["combined"].addTo(map);
+      Array.from(routeToggle.querySelectorAll("button")).forEach((button) => {{
+        button.classList.toggle("active", button.dataset.route === routeName);
+      }});
+
+      const routeDefinition = routeDefinitions.find((item) => item.name === routeName);
+      const activeDate = dateToggle.querySelector("button.active");
+      if (statusEl && routeDefinition && activeDate) {{
+        statusEl.textContent = routeDefinition.label + " route, " + activeDate.textContent + " traffic dataset";
       }}
-      setActiveDateButton(datasetSlug);
     }}
+
+    routeDefinitions.forEach((routeDefinition) => {{
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.route = routeDefinition.name;
+      button.textContent = routeDefinition.label;
+      button.addEventListener("click", () => showRoute(routeDefinition.name));
+      routeToggle.appendChild(button);
+    }});
 
     datasetOrder.forEach((dataset) => {{
       const button = document.createElement("button");
@@ -334,12 +443,16 @@ HTML_TEMPLATE = """<!DOCTYPE html>
           <span class="swatch-line" style="border-top-color:#f59e0b;"></span>
           <span>Airspace Only</span>
         </div>
+        <div class="legend-row">
+          <span class="swatch-line" style="border-top-color:#9333ea;"></span>
+          <span>Air Flight Density Only</span>
+        </div>
       `;
       return div;
     }};
     legend.addTo(map);
 
-    map.fitBounds(allBounds, {{ padding: [20, 20] }});
+    map.fitBounds(STUDY_BOUNDS, {{ padding: [20, 20] }});
     showDataset(datasetOrder[0].slug);
   </script>
 </body>

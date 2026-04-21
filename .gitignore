@@ -5,8 +5,6 @@ __pycache__/
 
 opensky/output/
 3D/output/
-html/ohare_density_leaflet.html
-html/ohare_3d_density_map.html
 images/visualizations/ohare_density_map.png
 geojson/il_blockgroups_population_density.geojson
 population/
