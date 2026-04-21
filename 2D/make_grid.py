@@ -1,10 +1,13 @@
 import numpy as np
 import pandas as pd
 import geopandas as gpd
+from pathlib import Path
 from shapely.geometry import box, Point
 
 # Initial set up
 CELL_SIZE_M = 500
+BASE_DIR = Path(__file__).resolve().parent
+REPO_ROOT = BASE_DIR.parent
 
 CRS_LL = "EPSG:4326"
 CRS_M  = "EPSG:3857"
@@ -13,10 +16,11 @@ CRS_M  = "EPSG:3857"
 NM_TO_M = 1852.0
 MI_TO_M = 1609.344
 
-# Bounds coords
+# Study bounds anchored to Aurora, Frankfort, and Lake Zurich.
 # West bound from 41°45′50″N 88°17′24″W
 # North bound from 42°07′25″N 87°55′15″W
-WEST, SOUTH, EAST, NORTH = -88.29, 41.104190944576466, -87.52534901500378, 42.12361111111111
+# Aurora west, Frankfort south, Lake Zurich north; east preserves Chicago Loop.
+WEST, SOUTH, EAST, NORTH = -88.34, 41.48, -87.52, 42.21
 
 # Airports
 # name, lat, lon, heading_deg, A (peak risk), L_m (Length), W_m (Width)
@@ -40,10 +44,7 @@ AIRSPACE_RADII_M = {
 
 # NO-FLY ZONES
 # name, lat, lon, radius_m
-NO_FLY_SITES = [
-    ("Argonne National Lab", 41.7150, -87.9830, 3000),
-    ("Fermilab", 41.8407, -88.2620, 3000),
-]
+NO_FLY_SITES = []
 
 # Build the grid using geopandas
 study_ll = gpd.GeoDataFrame(geometry=[box(WEST, SOUTH, EAST, NORTH)], crs=CRS_LL)
@@ -65,7 +66,7 @@ cx = grid_m["centroid"].x.to_numpy()
 cy = grid_m["centroid"].y.to_numpy()
 
 # Load + join population density to grid (centroid-in-polygon)
-BG_GEOJSON_PATH = "../geojson/il_blockgroups_population_density.geojson"
+BG_GEOJSON_PATH = REPO_ROOT / "geojson" / "il_blockgroups_population_density.geojson"
 bg = gpd.read_file(BG_GEOJSON_PATH).to_crs(CRS_M)
 
 # Clip block groups to the study area
@@ -215,7 +216,7 @@ grid_m.loc[grid_m["risk_cost"] > 70, "risk_class"] = "High"
 grid_m.loc[grid_m["risk_class"] == "No-Fly", "risk_cost"] = 9999
 
 # EXPORT
-OUTPUT_GEOJSON_PATH = "../geojson/risk_grid_v5.geojson"
+OUTPUT_GEOJSON_PATH = REPO_ROOT / "geojson" / "risk_grid_v6.geojson"
 grid_ll = grid_m.drop(columns=["centroid"]).to_crs(CRS_LL)
 grid_ll.to_file(OUTPUT_GEOJSON_PATH, driver="GeoJSON")
 print("Saved:", OUTPUT_GEOJSON_PATH)
