@@ -8,3 +8,4 @@ opensky/output/
 images/visualizations/ohare_density_map.png
 geojson/il_blockgroups_population_density.geojson
 population/
+html/ohare_density_leaflet.html

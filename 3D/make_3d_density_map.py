@@ -134,6 +134,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
   <script src="https://unpkg.com/deck.gl@9.0.13/dist.min.js"></script>
   <script>
+    // Each time window gets precomputed density bins plus lighter-weight track
+    // geometry so the browser only filters by time and altitude.
     const densityData = {density_data};
     const trackData = {track_data};
     const arrowData = {arrow_data};
@@ -274,6 +276,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         lineWidthMinPixels: 1
       }});
 
+      // Rebuild the deck.gl layer stack on every UI change so time, altitude,
+      // and view toggles stay in sync across all layer types.
       const layers = [tileLayer];
       if (showDensity) {{
         layers.push(pointLayer);
@@ -413,6 +417,8 @@ def load_flight_data(csv_path: Path) -> pd.DataFrame:
     data["lat"] = data["lat"].astype(float)
     data["lon"] = data["lon"].astype(float)
     data["baroaltitude"] = data["baroaltitude"].astype(float)
+    # Convert altitude to AGL because the slider and the density bins are meant
+    # to describe low-altitude airspace structure near the airports.
     data["altitude_agl_ft"] = (data["baroaltitude"] * METERS_TO_FEET - GROUND_ELEVATION_FT_MSL).clip(lower=0.0)
     data["icao24"] = data["icao24"].astype(str)
     return data.sort_values("time").reset_index(drop=True)
@@ -460,6 +466,8 @@ def interpolate_flight_paths(
                 }
             )
 
+            # Fill only short gaps so density bins are less sensitive to uneven
+            # OpenSky sampling without bridging obviously missing track segments.
             if gap_seconds <= step_seconds or gap_seconds > max_gap_seconds:
                 continue
 
@@ -520,6 +528,8 @@ def build_density_rows(data: pd.DataFrame, lat_step: float, lon_step: float, alt
             .agg(count=("time", "size"))
             .sort_values("count", ascending=False)
         )
+        # Reuse the 2D occupancy of each horizontal bin as the displayed "cost"
+        # so stacked altitude layers stay visually comparable.
         horizontal_costs = (
             window_data.groupby(["lat_bin", "lon_bin"], as_index=False)
             .agg(cost=("time", "size"))
@@ -593,6 +603,8 @@ def build_track_rows(
             all_origins[str(hours)] = []
             continue
 
+        # Downsample per flight so long tracks do not overwhelm deck.gl while
+        # still keeping the overall geometry recognizable.
         sampled = window_data[window_data.groupby("icao24").cumcount() % track_stride == 0]
         track_rows: list[dict[str, object]] = []
         arrow_rows: list[dict[str, object]] = []

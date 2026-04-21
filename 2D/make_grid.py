@@ -46,7 +46,8 @@ AIRSPACE_RADII_M = {
 # name, lat, lon, radius_m
 NO_FLY_SITES = []
 
-# Build the grid using geopandas
+# Build the study grid once in projected meters so every downstream cost uses
+# consistent cell sizes and distance measurements.
 study_ll = gpd.GeoDataFrame(geometry=[box(WEST, SOUTH, EAST, NORTH)], crs=CRS_LL)
 study_m = study_ll.to_crs(CRS_M)
 
@@ -65,7 +66,8 @@ grid_m["centroid"] = grid_m.geometry.centroid
 cx = grid_m["centroid"].x.to_numpy()
 cy = grid_m["centroid"].y.to_numpy()
 
-# Load + join population density to grid (centroid-in-polygon)
+# Join population density by cell centroid so each cell gets a single dominant
+# census block group instead of blending neighboring polygons.
 BG_GEOJSON_PATH = REPO_ROOT / "geojson" / "il_blockgroups_population_density.geojson"
 bg = gpd.read_file(BG_GEOJSON_PATH).to_crs(CRS_M)
 
@@ -95,7 +97,8 @@ grid_m["city_risk"] = 0.0
 DENSITY_SCALE = 10.0
 grid_m["city_risk"] = (grid_m["density_p_km2"] / DENSITY_SCALE).clip(0, 120)
 
-# Runway corridor model (existing)
+# Model runway-aligned approach/departure corridors separately from the radial
+# airspace rings so both effects can be tuned independently.
 def runway_uv(dx, dy, heading_deg):
     theta = np.deg2rad(heading_deg - 90.0)
     u = np.cos(theta) * dx + np.sin(theta) * dy
@@ -129,8 +132,8 @@ AIR_HIGH_TH = 70
 grid_m.loc[grid_m["city_risk"] > POP_MED_TH, "pop_class"] = "Medium"
 grid_m.loc[grid_m["city_risk"] > POP_HIGH_TH, "pop_class"] = "High"
 
-# 2D Airspace radius risk (two innermost rings)
-# High inside inner radius, medium decays between inner and outer
+# Add the simplified airport "stay-away" rings on top of the corridor risk:
+# inner ring is high cost, outer ring decays away from that boundary.
 def radial_decay(d_m, A, S_m):
     return A * np.exp(-d_m / S_m)
 
@@ -189,7 +192,8 @@ grid_m["airport_risk_combined"] = grid_m["airport_risk"] + AIRSPACE_WEIGHT * gri
 grid_m.loc[grid_m["airport_risk_combined"] > AIR_MED_TH, "air_class"] = "Medium"
 grid_m.loc[grid_m["airport_risk_combined"] > AIR_HIGH_TH, "air_class"] = "High"
 
-# Dominant type selection (population vs airspace)
+# Keep the dominant source so the map can explain whether a cell is driven by
+# population exposure or airport constraints.
 dominant_mask = (grid_m["pop_class"] != "Low") | (grid_m["air_class"] != "Low")
 grid_m.loc[dominant_mask & (grid_m["city_risk"] >= grid_m["airport_risk_combined"]), "density_type"] = "population"
 grid_m.loc[dominant_mask & (grid_m["airport_risk_combined"] > grid_m["city_risk"]), "density_type"] = "airspace"
@@ -212,7 +216,8 @@ for name, lat, lon, radius in NO_FLY_SITES:
 grid_m.loc[grid_m["risk_cost"] > 30, "risk_class"] = "Medium"
 grid_m.loc[grid_m["risk_cost"] > 70, "risk_class"] = "High"
 
-# No-fly overrides everything
+# Freeze no-fly cells at an overwhelming cost so route search will never prefer
+# them over ordinary risk tradeoffs.
 grid_m.loc[grid_m["risk_class"] == "No-Fly", "risk_cost"] = 9999
 
 # EXPORT

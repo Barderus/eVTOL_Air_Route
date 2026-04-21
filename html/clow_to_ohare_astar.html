@@ -191,11 +191,31 @@
     const allBounds = L.latLngBounds([startPoint.lat, startPoint.lon], [destinationPoint.lat, destinationPoint.lon]);
     const routeDefinitions = [{"name": "combined", "label": "Combined"}, {"name": "population_only", "label": "Population Only"}, {"name": "distance_only", "label": "Distance Only"}, {"name": "airspace_only", "label": "Airspace Only"}, {"name": "air_traffic_only", "label": "Air Flight Density Only"}];
     const activeRouteLayers = {};
+    // Index features by dataset slug and route name so a date switch only swaps
+    // the visible route geometry, not the whole map.
     const datasetLayers = new Map();
     const dateToggle = document.getElementById("dateToggle");
     const routeToggle = document.getElementById("routeToggle");
     const statusEl = document.getElementById("status");
     let activeRouteName = "combined";
+
+    function formatDatasetLabel(dateLabel) {
+      if (/^(Sun|Mon|Tue|Wed|Thu|Fri|Sat)\s/.test(dateLabel)) {
+        return dateLabel;
+      }
+
+      const parsedDate = new Date(`${dateLabel}T00:00:00`);
+      if (Number.isNaN(parsedDate.getTime())) {
+        return dateLabel;
+      }
+
+      return parsedDate.toLocaleDateString("en-US", {
+        weekday: "short",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit"
+      }).replace(/,\s*/, " ");
+    }
 
     routeData.features.forEach((feature) => {
       const properties = feature.properties || {};
@@ -220,7 +240,7 @@
           routeLayer.bindPopup(
             `<b>${p.destination_label}</b><br>` +
             `<b>Route:</b> ${p.route_label}<br>` +
-            `<b>Dataset:</b> ${p.dataset_label}<br>` +
+            `<b>Dataset:</b> ${formatDatasetLabel(p.dataset_label)}<br>` +
             `<b>Path nodes:</b> ${p.path_nodes}<br>` +
             `<b>Total cost:</b> ${Number(p.total_cost).toFixed(4)}<br>` +
             `<b>Weights:</b> D=${p.distance_weight}, P=${p.population_weight}, A=${p.airspace_weight}, T=${p.traffic_weight}`
@@ -284,7 +304,7 @@
       const button = document.createElement("button");
       button.type = "button";
       button.dataset.slug = dataset.slug;
-      button.textContent = dataset.label;
+      button.textContent = formatDatasetLabel(dataset.label);
       button.addEventListener("click", () => showDataset(dataset.slug));
       dateToggle.appendChild(button);
     });
@@ -292,24 +312,15 @@
     const legend = L.control({ position: "bottomright" });
     legend.onAdd = function () {
       const div = L.DomUtil.create("div", "legend-box");
+      const legendRows = routeDefinitions.map((routeDefinition) => `
+        <div class="legend-row">
+          <span class="swatch-line" style="border-top-color:${routeDefinition.color};"></span>
+          <span>${routeDefinition.label}</span>
+        </div>
+      `).join("");
       div.innerHTML = `
         <div style="font-weight:700; margin-bottom:6px;">Clow To O'Hare International Airport A* Route</div>
-        <div class="legend-row">
-          <span class="swatch-line" style="border-top-color:#dc2626;"></span>
-          <span>Combined</span>
-        </div>
-        <div class="legend-row">
-          <span class="swatch-line" style="border-top-color:#2563eb;"></span>
-          <span>Population Only</span>
-        </div>
-        <div class="legend-row">
-          <span class="swatch-line" style="border-top-color:#16a34a;"></span>
-          <span>Distance Only</span>
-        </div>
-        <div class="legend-row">
-          <span class="swatch-line" style="border-top-color:#f59e0b;"></span>
-          <span>Airspace Only</span>
-        </div>
+        ${legendRows}
       `;
       return div;
     };

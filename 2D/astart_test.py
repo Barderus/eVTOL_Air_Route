@@ -3,6 +3,8 @@ import math
 import matplotlib.pyplot as plt
 
 
+# Store geographic coordinates on the nodes so the heuristic can estimate
+# remaining mileage instead of using a zero heuristic like Dijkstra.
 chicago = nx.MultiGraph()
 
 chicago.add_nodes_from([
@@ -112,7 +114,8 @@ nx.draw(chicago, with_labels=True, font_weight='bold')
 plt.savefig("chicago.png")
 plt.show()
 
-# Harvesine formula allows us to transform our degree coord into miles
+# Haversine gives a straight-line lower bound in miles, which keeps the A*
+# heuristic admissible for this road-network example.
 def dist(u, v):
     lat1, lon1 = chicago.nodes[u]["pos"]
     lat2, lon2 = chicago.nodes[v]["pos"]

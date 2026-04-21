@@ -172,6 +172,7 @@
       attribution: "&copy; OpenStreetMap contributors"
     }).addTo(map);
 
+    // Route name doubles as the key for both styling and popup labels.
     const routeStyles = {
       combined: { color: "#111827", weight: 7, opacity: 0.95 },
       population_only: { color: "#16a34a", weight: 6, opacity: 0.9, dashArray: "10 6" },
@@ -262,6 +263,7 @@
 
         showRoute(routeLayers[activeRouteName] ? activeRouteName : routeOrder[0].name);
 
+        // Keep the legend in sync with the style map above.
         const legend = L.control({ position: "bottomright" });
         legend.onAdd = function () {
           const div = L.DomUtil.create("div", "legend-box");
