@@ -56,7 +56,7 @@ python 2D\make_grid.py
 
 Output:
 
-- `geojson\risk_grid_v5.geojson`
+- `geojson\risk_grid_v6.geojson`
 
 To view the risk map:
 
@@ -138,6 +138,6 @@ http://localhost:8080/html/ohare_3d_density_map.html
 
 ## Notes
 
-- `2D\chicago_graph.py` expects `geojson\risk_grid_v5.geojson` to exist first.
+- `2D\chicago_graph.py` expects `geojson\risk_grid_v6.geojson` to exist first.
 - `2D\make_grid.py` expects `geojson\il_blockgroups_population_density.geojson` to exist first.
 - The OpenSky exporter expects CSV columns consistent with `opensky\query.sql`.
