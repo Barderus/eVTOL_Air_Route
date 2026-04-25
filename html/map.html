@@ -208,10 +208,10 @@
       <div id="status" class="status">Loading risk grid...</div>
     </div>
 
-    <div class="segmented" role="group" aria-label="Risk layer">
-      <button id="btnCombined" class="active" type="button">Combined</button>
-      <button id="btnAir" type="button">Airspace</button>
-      <button id="btnPop" type="button">Population</button>
+    <div class="segmented" role="group" aria-label="Risk layers">
+      <button id="btnCombined" class="active" type="button" aria-pressed="true">Combined</button>
+      <button id="btnAir" type="button" aria-pressed="false">Airspace</button>
+      <button id="btnPop" type="button" aria-pressed="false">Population</button>
     </div>
   </header>
 
@@ -328,7 +328,18 @@
       { collapsed: false, position: "topright" }
     ).addTo(map);
 
-    let currentMode = "combined";
+    const layerOrder = ["combined", "air", "pop"];
+    const layerLabels = {
+      combined: "Combined",
+      air: "Airspace",
+      pop: "Population"
+    };
+    const buttonMap = {
+      combined: document.getElementById("btnCombined"),
+      air: document.getElementById("btnAir"),
+      pop: document.getElementById("btnPop")
+    };
+    const activeModes = new Set(["combined"]);
     let gridLayers = {
       combined: null,
       air: null,
@@ -471,15 +482,15 @@
       return colors.low;
     }
 
-    function gridStyle(colorFn) {
+    function gridStyle(colorFn, opacityScale = 1) {
       return function(feature) {
         const color = colorFn(feature);
         return {
           color,
           weight: 0.35,
-          opacity: 0.45,
+          opacity: Math.max(0.2, 0.45 * opacityScale),
           fillColor: color,
-          fillOpacity: 0.58
+          fillOpacity: Math.min(0.7, 0.58 * opacityScale)
         };
       };
     }
@@ -511,26 +522,48 @@
       });
     }
 
-    function setActiveButton(mode) {
-      const buttonMap = {
-        combined: document.getElementById("btnCombined"),
-        air: document.getElementById("btnAir"),
-        pop: document.getElementById("btnPop")
-      };
-
-      Object.values(buttonMap).forEach((button) => button.classList.remove("active"));
-      buttonMap[mode].classList.add("active");
+    function modeOpacityScale(mode, activeCount) {
+      if (activeCount <= 1) return 1;
+      if (activeCount === 2) return mode === "combined" ? 0.62 : 0.52;
+      return mode === "combined" ? 0.42 : 0.36;
     }
 
-    function showGridLayer(mode) {
-      Object.values(gridLayers).forEach((layer) => {
-        if (layer && map.hasLayer(layer)) map.removeLayer(layer);
+    function setActiveButtons() {
+      Object.entries(buttonMap).forEach(([mode, button]) => {
+        const isActive = activeModes.has(mode);
+        button.classList.toggle("active", isActive);
+        button.setAttribute("aria-pressed", String(isActive));
       });
+    }
 
-      gridLayers[mode].addTo(map);
-      currentMode = mode;
-      setActiveButton(mode);
-      updateLegend(mode);
+    function refreshGridLayers() {
+      const activeCount = activeModes.size;
+
+      layerOrder.forEach((mode) => {
+        const layer = gridLayers[mode];
+        if (!layer) return;
+
+        if (activeModes.has(mode)) {
+          layer.setStyle(gridStyle(layerColorFns[mode], modeOpacityScale(mode, activeCount)));
+          if (!map.hasLayer(layer)) layer.addTo(map);
+          if (typeof layer.bringToFront === "function") layer.bringToFront();
+        } else if (map.hasLayer(layer)) {
+          map.removeLayer(layer);
+        }
+      });
+    }
+
+    function activeModeSummary() {
+      return layerOrder
+        .filter((mode) => activeModes.has(mode))
+        .map((mode) => layerLabels[mode])
+        .join(" + ");
+    }
+
+    function syncVisibleLayers() {
+      refreshGridLayers();
+      setActiveButtons();
+      updateLegend();
     }
 
     const legend = L.control({ position: "bottomright" });
@@ -543,41 +576,53 @@
 
     legend.addTo(map);
 
-    function legendRows(mode) {
-      if (mode === "air") {
-        return [
+    function legendRows() {
+      const rows = [];
+
+      if (activeModes.has("combined")) {
+        rows.push(
+          ["Low combined risk", colors.low],
+          ["Population medium", colors.mediumPop],
+          ["Population high", colors.highPop],
+          ["Airspace medium", colors.mediumAir],
+          ["Airspace high", colors.highAir]
+        );
+      }
+
+      if (activeModes.has("air")) {
+        rows.push(
           ["Low airspace risk", colors.low],
           ["Medium airspace risk", colors.mediumAir],
           ["High airspace risk", colors.highAir]
-        ];
+        );
       }
 
-      if (mode === "pop") {
-        return [
+      if (activeModes.has("pop")) {
+        rows.push(
           ["Low population risk", colors.low],
           ["Medium population risk", colors.mediumPop],
           ["High population risk", colors.highPop]
-        ];
+        );
       }
 
-      return [
-        ["Low combined risk", colors.low],
-        ["Population medium", colors.mediumPop],
-        ["Population high", colors.highPop],
-        ["Airspace medium", colors.mediumAir],
-        ["Airspace high", colors.highAir]
-      ];
+      const seen = new Set();
+      return rows.filter(([label, color]) => {
+        const key = `${label}|${color}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
     }
 
-    function updateLegend(mode) {
+    function updateLegend() {
       const legendEl = document.getElementById("legend");
       if (!legendEl) return;
 
-      const rows = legendRows(mode).map(([label, color]) => (
+      const rows = legendRows().map(([label, color]) => (
         `<div class="legend-row"><span class="swatch" style="background:${color}"></span><span>${label}</span></div>`
       )).join("");
 
-      legendEl.innerHTML = `<div class="legend-title">${mode === "combined" ? "Combined" : mode === "air" ? "Airspace" : "Population"} Layer</div>${rows}`;
+      legendEl.innerHTML = `<div class="legend-title">${activeModeSummary()} Layer${activeModes.size > 1 ? "s" : ""}</div>${rows}`;
     }
 
     function showLoadError(error) {
@@ -592,11 +637,29 @@
       console.error(error);
     }
 
-    document.getElementById("btnCombined").addEventListener("click", () => showGridLayer("combined"));
-    document.getElementById("btnAir").addEventListener("click", () => showGridLayer("air"));
-    document.getElementById("btnPop").addEventListener("click", () => showGridLayer("pop"));
+    function toggleGridLayer(mode) {
+      if (activeModes.has(mode)) {
+        if (activeModes.size === 1) return;
+        activeModes.delete(mode);
+      } else {
+        activeModes.add(mode);
+      }
 
-    updateLegend(currentMode);
+      syncVisibleLayers();
+      statusEl.textContent = `${activeModeSummary()} layer${activeModes.size > 1 ? "s" : ""} selected`;
+    }
+
+    document.getElementById("btnCombined").addEventListener("click", () => toggleGridLayer("combined"));
+    document.getElementById("btnAir").addEventListener("click", () => toggleGridLayer("air"));
+    document.getElementById("btnPop").addEventListener("click", () => toggleGridLayer("pop"));
+
+    const layerColorFns = {
+      combined: colorCombined,
+      air: colorAirspace,
+      pop: colorPopulation
+    };
+
+    updateLegend();
 
     fetch(GRID_URL)
       .then((response) => {
@@ -612,7 +675,7 @@
           pop: makeGridLayer(data, colorPopulation)
         };
 
-        showGridLayer(currentMode);
+        syncVisibleLayers();
 
         const bounds = gridLayers.combined.getBounds();
         if (bounds.isValid()) {

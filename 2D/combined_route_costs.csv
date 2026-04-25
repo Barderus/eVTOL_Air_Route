@@ -1,0 +1,19 @@
+destination_slug,destination,dataset_slug,dataset_label,total_cost,path_nodes
+union_station,Chicago,2026-03-07,Sat 2026-03-07,131.48945610056276,113
+union_station,Chicago,2026-03-09,Mon 2026-03-09,131.52142443740496,113
+union_station,Chicago,2026-01-10,Sat 2026-01-10,131.501486373158,113
+union_station,Chicago,2026-01-12,Mon 2026-01-12,131.57593123323497,113
+union_station,Chicago,2025-07-14,Mon 2025-07-14,131.6469807656338,113
+union_station,Chicago,2025-07-12,Sat 2025-07-12,131.50866020374886,113
+ohare,O'Hare International Airport,2026-03-07,Sat 2026-03-07,120.8399896063522,87
+ohare,O'Hare International Airport,2026-03-09,Mon 2026-03-09,120.87680265845162,87
+ohare,O'Hare International Airport,2026-01-10,Sat 2026-01-10,120.85745121629603,87
+ohare,O'Hare International Airport,2026-01-12,Mon 2026-01-12,120.95191187862514,87
+ohare,O'Hare International Airport,2025-07-14,Mon 2025-07-14,120.96937360521562,87
+ohare,O'Hare International Airport,2025-07-12,Sat 2025-07-12,120.87053172221508,87
+midway,Midway International Airport,2026-03-07,Sat 2026-03-07,87.97697287243602,87
+midway,Midway International Airport,2026-03-09,Mon 2026-03-09,87.97290434802763,87
+midway,Midway International Airport,2026-01-10,Sat 2026-01-10,88.00365339645448,87
+midway,Midway International Airport,2026-01-12,Mon 2026-01-12,87.98757324007627,87
+midway,Midway International Airport,2025-07-14,Mon 2025-07-14,88.33053291000661,87
+midway,Midway International Airport,2025-07-12,Sat 2025-07-12,87.95831594998079,87

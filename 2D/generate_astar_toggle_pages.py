@@ -44,15 +44,6 @@ ROUTE_SPECS = [
         "color": "#f59e0b",
     },
     {
-        "name": "flight_density_only",
-        "label": "Flight Density Only",
-        "distance_weight": 0.0,
-        "population_weight": 0.0,
-        "airspace_weight": 0.0,
-        "traffic_weight": 1.0,
-        "color": "#7c3aed",
-    },
-    {
         "name": "population_only",
         "label": "Population Only",
         "distance_weight": 0.0,
@@ -69,15 +60,6 @@ ROUTE_SPECS = [
         "airspace_weight": 0.0,
         "traffic_weight": 0.0,
         "color": "#16a34a",
-    },
-    {
-        "name": "airspace_only",
-        "label": "Airspace Only",
-        "distance_weight": 0.0,
-        "population_weight": 0.0,
-        "airspace_weight": 1.0,
-        "traffic_weight": 0.0,
-        "color": "#f59e0b",
     },
     {
         "name": "air_traffic_only",
@@ -209,14 +191,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       line-height: 1.2;
     }}
 
-    .status {{
-      margin-top: 2px;
-      color: var(--muted);
-      font-size: 12px;
-      line-height: 1.25;
-      white-space: nowrap;
-    }}
-
     .control-strip {{
       display: flex;
       align-items: center;
@@ -286,7 +260,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
     @media (max-width: 920px) {{
       .toolbar {{ align-items: stretch; flex-direction: column; gap: 9px; }}
-      .status {{ white-space: normal; }}
       .control-strip {{ justify-content: stretch; }}
       .segmented {{ width: 100%; }}
       .route-toggle {{ grid-template-columns: repeat(5, minmax(0, 1fr)); }}
@@ -300,7 +273,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   <header class="toolbar">
     <div class="title-block">
       <h1>{page_title}</h1>
-      <div id="status" class="status">Select a route mode and traffic date.</div>
     </div>
     <div class="control-strip">
       <div class="segmented route-toggle" id="routeToggle" role="group" aria-label="Route mode"></div>
@@ -321,9 +293,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     );
     const map = L.map("map", {{
       center: [41.84, -87.93],
-      zoom: 10,
-      maxBounds: STUDY_BOUNDS.pad(0.04),
-      maxBoundsViscosity: 0.9
+      zoom: 10
     }});
     const routeData = {route_data};
     const datasetOrder = {dataset_order};
@@ -348,8 +318,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     const datasetLayers = new Map();
     const dateToggle = document.getElementById("dateToggle");
     const routeToggle = document.getElementById("routeToggle");
-    const statusEl = document.getElementById("status");
-    let activeRouteName = "combined";
+    const activeRouteNames = new Set(["combined"]);
 
     function formatDatasetLabel(dateLabel) {{
       if (/^(Sun|Mon|Tue|Wed|Thu|Fri|Sat)\\s/.test(dateLabel)) {{
@@ -405,6 +374,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     function setActiveDateButton(activeSlug) {{
       Array.from(dateToggle.querySelectorAll("button")).forEach((button) => {{
         button.classList.toggle("active", button.dataset.slug === activeSlug);
+        button.setAttribute("aria-pressed", button.dataset.slug === activeSlug ? "true" : "false");
       }});
     }}
 
@@ -420,13 +390,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       }});
 
       setActiveDateButton(datasetSlug);
-      showRoute(activeRouteName);
+      renderActiveRoutes();
     }}
 
-    function showRoute(routeName) {{
-      activeRouteName = routeName;
+    function renderActiveRoutes() {{
       Object.entries(activeRouteLayers).forEach(([name, layer]) => {{
-        if (name === routeName && layer.getLayers().length > 0) {{
+        if (activeRouteNames.has(name) && layer.getLayers().length > 0) {{
           layer.addTo(map);
         }} else {{
           map.removeLayer(layer);
@@ -434,14 +403,23 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       }});
 
       Array.from(routeToggle.querySelectorAll("button")).forEach((button) => {{
-        button.classList.toggle("active", button.dataset.route === routeName);
+        const isActive = activeRouteNames.has(button.dataset.route);
+        button.classList.toggle("active", isActive);
+        button.setAttribute("aria-pressed", isActive ? "true" : "false");
       }});
+    }}
 
-      const routeDefinition = routeDefinitions.find((item) => item.name === routeName);
-      const activeDate = dateToggle.querySelector("button.active");
-      if (statusEl && routeDefinition && activeDate) {{
-        statusEl.textContent = routeDefinition.label + " route, " + activeDate.textContent + " traffic dataset";
+    function toggleRoute(routeName) {{
+      if (activeRouteNames.has(routeName)) {{
+        if (activeRouteNames.size === 1) {{
+          return;
+        }}
+        activeRouteNames.delete(routeName);
+      }} else {{
+        activeRouteNames.add(routeName);
       }}
+
+      renderActiveRoutes();
     }}
 
     routeDefinitions.forEach((routeDefinition) => {{
@@ -449,7 +427,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       button.type = "button";
       button.dataset.route = routeDefinition.name;
       button.textContent = routeDefinition.label;
-      button.addEventListener("click", () => showRoute(routeDefinition.name));
+      button.setAttribute("aria-pressed", routeDefinition.name === "combined" ? "true" : "false");
+      button.addEventListener("click", () => toggleRoute(routeDefinition.name));
       routeToggle.appendChild(button);
     }});
 
@@ -458,6 +437,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       button.type = "button";
       button.dataset.slug = dataset.slug;
       button.textContent = formatDatasetLabel(dataset.label);
+      button.setAttribute("aria-pressed", "false");
       button.addEventListener("click", () => showDataset(dataset.slug));
       dateToggle.appendChild(button);
     }});
@@ -473,26 +453,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       `).join("");
       div.innerHTML = `
         <div style="font-weight:700; margin-bottom:6px;">{page_title}</div>
-        <div class="legend-row">
-          <span class="swatch-line" style="border-top-color:#dc2626;"></span>
-          <span>Combined</span>
-        </div>
-        <div class="legend-row">
-          <span class="swatch-line" style="border-top-color:#2563eb;"></span>
-          <span>Population Only</span>
-        </div>
-        <div class="legend-row">
-          <span class="swatch-line" style="border-top-color:#16a34a;"></span>
-          <span>Distance Only</span>
-        </div>
-        <div class="legend-row">
-          <span class="swatch-line" style="border-top-color:#f59e0b;"></span>
-          <span>Airspace Only</span>
-        </div>
-        <div class="legend-row">
-          <span class="swatch-line" style="border-top-color:#9333ea;"></span>
-          <span>Air Flight Density Only</span>
-        </div>
+        ${{legendRows}}
       `;
       return div;
     }};
