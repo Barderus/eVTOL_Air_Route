@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Chicago eVTOL Risk Map</title>
+  <title>Chicago Class B Shelf Comparison</title>
 
   <link
     rel="stylesheet"
@@ -27,6 +27,10 @@
       --medium-pop: #6baed6;
       --high-pop: #08306b;
       --nofly: #111111;
+      --model-ring: #7c3aed;
+      --faa-surface: #9f1239;
+      --faa-shelf: #ea580c;
+      --faa-lake: #0284c7;
     }
 
     * {
@@ -60,7 +64,7 @@
     }
 
     .title-block {
-      min-width: 180px;
+      min-width: 220px;
     }
 
     h1 {
@@ -125,6 +129,7 @@
     }
 
     .legend-box,
+    .info-box,
     .error-box {
       padding: 10px 12px;
       border: 1px solid rgba(23, 32, 38, 0.15);
@@ -136,7 +141,8 @@
       line-height: 1.35;
     }
 
-    .legend-title {
+    .legend-title,
+    .info-title {
       margin-bottom: 7px;
       font-weight: 700;
     }
@@ -177,13 +183,25 @@
       padding: 3px 7px;
       border: 1px solid rgba(23, 32, 38, 0.16);
       border-radius: 999px;
-      background: rgba(255, 255, 255, 0.92);
+      background: rgba(255, 255, 255, 0.94);
       box-shadow: 0 4px 10px rgba(23, 32, 38, 0.12);
       color: var(--text);
       font-size: 11px;
       font-weight: 700;
       line-height: 1;
       white-space: nowrap;
+    }
+
+    .info-box {
+      max-width: 360px;
+    }
+
+    .info-box p {
+      margin: 0 0 6px;
+    }
+
+    .info-box p:last-child {
+      margin-bottom: 0;
     }
 
     @media (max-width: 720px) {
@@ -217,8 +235,8 @@
 <body>
   <header class="toolbar">
     <div class="title-block">
-      <h1>Chicago eVTOL Risk Map</h1>
-      <div id="status" class="status">Loading risk grid...</div>
+      <h1>Chicago Class B Shelf Comparison</h1>
+      <div id="status" class="status">Loading risk grid and layered Class B shelf overlays...</div>
     </div>
 
     <div class="segmented" role="group" aria-label="Risk layer">
@@ -228,7 +246,7 @@
     </div>
   </header>
 
-  <main id="map" aria-label="Chicago eVTOL risk map"></main>
+  <main id="map" aria-label="Chicago Class B shelf comparison map"></main>
 
   <script
     src="https://unpkg.com/leaflet@1.6.0/dist/leaflet.js"
@@ -247,10 +265,8 @@
     const AIR_MED_TH = 30;
     const AIR_HIGH_TH = 70;
     const LAB_NO_FLY_RADIUS_M = 3000;
-    const CELL_SIZE_M = 500;
     const METERS_PER_DEG_LAT = 111320;
     const NM_TO_METERS = 1852;
-    const GRID_RADIUS_OFFSET_M = CELL_SIZE_M / 2;
 
     const labNoFlySites = [
       { name: "Argonne National Lab", lat: 41.7150, lon: -87.9830 },
@@ -264,40 +280,14 @@
       { name: "Brookeridge Airpark", lat: 41.73268507397754, lon: -87.9972105460431 }
     ];
 
-    const airportRingSpecs = [
-      {
-        airportName: "O'Hare International Airport",
-        label: "ORD 5 NM",
-        radiusNm: 5,
-        color: "#8b5cf6",
-        dashArray: "8 6"
-      },
-      {
-        airportName: "O'Hare International Airport",
-        label: "ORD 10 NM",
-        radiusNm: 10,
-        color: "#7c3aed",
-        dashArray: "14 7"
-      },
-      {
-        airportName: "Midway International Airport",
-        label: "MDW 5 NM",
-        radiusNm: 5,
-        color: "#0f766e",
-        dashArray: "8 6"
-      },
-      {
-        airportName: "Midway International Airport",
-        label: "MDW 10 NM",
-        radiusNm: 10,
-        color: "#0ea5a5",
-        dashArray: "14 7"
-      }
-    ];
-
     const routeEndpoints = {
       start: { label: "Clow International Airport", lat: 41.695923717435235, lon: -88.12876224517822 },
       end: { label: "Chicago Loop", lat: 41.87838051825937, lon: -87.63905525207521 }
+    };
+
+    const faaRef = {
+      ordPoo: { label: "Chicago Class B Point of Origin", lat: 41.9877777778, lon: -87.9047222222 },
+      mdwLegal: { label: "Chicago Midway Legal Center", lat: 41.7861111111, lon: -87.7525000000 }
     };
 
     const colors = {
@@ -365,64 +355,6 @@
           .bindPopup(`<b>${airport.name}</b>`)
       ))
     ).addTo(map);
-
-    function ringLabelLatLng(lat, lon, radiusMeters) {
-      return [lat + (radiusMeters / METERS_PER_DEG_LAT), lon];
-    }
-
-    const airportRingLayer = L.layerGroup(
-      airportRingSpecs.flatMap((spec) => {
-        const airport = airports.find((item) => item.name === spec.airportName);
-        if (!airport) return [];
-
-        // The risk grid is classified from 500 m cell centroids. Expanding the
-        // display radius by half a cell makes the overlay track the outer edge
-        // of the included cells instead of the idealized centroid threshold.
-        const radiusMeters = (spec.radiusNm * NM_TO_METERS) + GRID_RADIUS_OFFSET_M;
-        const circle = L.circle([airport.lat, airport.lon], {
-          radius: radiusMeters,
-          color: spec.color,
-          weight: 2.2,
-          opacity: 0.95,
-          dashArray: spec.dashArray,
-          fill: false,
-          interactive: true
-        }).bindPopup(
-          `<b>${airport.name}</b><br>` +
-          `${spec.label} protected ring<br>` +
-          `Base radius: ${spec.radiusNm} NM<br>` +
-          `Grid-adjusted display radius: ${(radiusMeters / NM_TO_METERS).toFixed(2)} NM`
-        );
-
-        const label = L.marker(ringLabelLatLng(airport.lat, airport.lon, radiusMeters), {
-          interactive: false,
-          icon: L.divIcon({
-            className: "",
-            html: `<span class="ring-label">${spec.label}</span>`,
-            iconSize: null
-          })
-        });
-
-        return [circle, label];
-      })
-    ).addTo(map);
-
-    L.control.layers(
-      null,
-      {
-        "Reference route": referenceLayer,
-        "Airports": airportLayer,
-        "Airport rings": airportRingLayer
-      },
-      { collapsed: false, position: "topright" }
-    ).addTo(map);
-
-    let currentMode = "combined";
-    let gridLayers = {
-      combined: null,
-      air: null,
-      pop: null
-    };
 
     function fmt(value, digits = 1) {
       const number = Number(value);
@@ -611,6 +543,13 @@
       buttonMap[mode].classList.add("active");
     }
 
+    let currentMode = "combined";
+    let gridLayers = {
+      combined: null,
+      air: null,
+      pop: null
+    };
+
     function showGridLayer(mode) {
       Object.values(gridLayers).forEach((layer) => {
         if (layer && map.hasLayer(layer)) map.removeLayer(layer);
@@ -623,13 +562,11 @@
     }
 
     const legend = L.control({ position: "bottomright" });
-
     legend.onAdd = function() {
       const div = L.DomUtil.create("div", "legend-box");
       div.id = "legend";
       return div;
     };
-
     legend.addTo(map);
 
     function legendRows(mode) {
@@ -674,12 +611,315 @@
       const errorControl = L.control({ position: "bottomleft" });
       errorControl.onAdd = function() {
         const div = L.DomUtil.create("div", "error-box");
-        div.textContent = `Unable to load ${GRID_URL}. Serve the project with python -m http.server and open /html/map.html.`;
+        div.textContent = `Unable to load ${GRID_URL}. Serve the project with python -m http.server and open /html/map_airspace_compare.html.`;
         return div;
       };
       errorControl.addTo(map);
       console.error(error);
     }
+
+    function toLocalXY(point, lat0) {
+      return {
+        x: point.lon * METERS_PER_DEG_LAT * Math.cos(lat0 * Math.PI / 180),
+        y: point.lat * METERS_PER_DEG_LAT
+      };
+    }
+
+    function fromLocalXY(point, lat0) {
+      return {
+        lon: point.x / (METERS_PER_DEG_LAT * Math.cos(lat0 * Math.PI / 180)),
+        lat: point.y / METERS_PER_DEG_LAT
+      };
+    }
+
+    function choosePoint(points, selector) {
+      return points.reduce((best, point) => {
+        if (!best) return point;
+        return selector(point, best) ? point : best;
+      }, null);
+    }
+
+    function circleIntersections(centerA, radiusA, centerB, radiusB) {
+      const lat0 = (centerA.lat + centerB.lat) / 2;
+      const a = toLocalXY(centerA, lat0);
+      const b = toLocalXY(centerB, lat0);
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const d = Math.hypot(dx, dy);
+      if (!d || d > radiusA + radiusB || d < Math.abs(radiusA - radiusB)) {
+        return [];
+      }
+
+      const distanceToChord = ((radiusA * radiusA) - (radiusB * radiusB) + (d * d)) / (2 * d);
+      const halfChord = Math.sqrt(Math.max(0, (radiusA * radiusA) - (distanceToChord * distanceToChord)));
+      const ux = dx / d;
+      const uy = dy / d;
+      const px = a.x + (distanceToChord * ux);
+      const py = a.y + (distanceToChord * uy);
+
+      const intersection1 = fromLocalXY({
+        x: px + (-uy * halfChord),
+        y: py + (ux * halfChord)
+      }, lat0);
+
+      const intersection2 = fromLocalXY({
+        x: px - (-uy * halfChord),
+        y: py - (ux * halfChord)
+      }, lat0);
+
+      return [intersection1, intersection2];
+    }
+
+    function eastLineCircleIntersection(startPoint, center, radiusMeters) {
+      const lat0 = (startPoint.lat + center.lat) / 2;
+      const start = toLocalXY(startPoint, lat0);
+      const c = toLocalXY(center, lat0);
+      const dy = start.y - c.y;
+      const inside = (radiusMeters * radiusMeters) - (dy * dy);
+      if (inside < 0) return null;
+      const dx = Math.sqrt(inside);
+      const candidate1 = fromLocalXY({ x: c.x + dx, y: start.y }, lat0);
+      const candidate2 = fromLocalXY({ x: c.x - dx, y: start.y }, lat0);
+      return candidate1.lon > candidate2.lon ? candidate1 : candidate2;
+    }
+
+    function bearingDegrees(center, point) {
+      const lat1 = center.lat * Math.PI / 180;
+      const lat2 = point.lat * Math.PI / 180;
+      const dLon = (point.lon - center.lon) * Math.PI / 180;
+      const y = Math.sin(dLon) * Math.cos(lat2);
+      const x = (Math.cos(lat1) * Math.sin(lat2)) - (Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon));
+      return ((Math.atan2(y, x) * 180 / Math.PI) + 360) % 360;
+    }
+
+    function destinationPoint(center, radiusMeters, bearingDeg) {
+      const earthRadius = 6371000;
+      const bearing = bearingDeg * Math.PI / 180;
+      const lat1 = center.lat * Math.PI / 180;
+      const lon1 = center.lon * Math.PI / 180;
+      const angularDistance = radiusMeters / earthRadius;
+
+      const lat2 = Math.asin(
+        (Math.sin(lat1) * Math.cos(angularDistance)) +
+        (Math.cos(lat1) * Math.sin(angularDistance) * Math.cos(bearing))
+      );
+
+      const lon2 = lon1 + Math.atan2(
+        Math.sin(bearing) * Math.sin(angularDistance) * Math.cos(lat1),
+        Math.cos(angularDistance) - (Math.sin(lat1) * Math.sin(lat2))
+      );
+
+      return {
+        lat: lat2 * 180 / Math.PI,
+        lon: lon2 * 180 / Math.PI
+      };
+    }
+
+    function circleArc(center, radiusMeters, startPoint, endPoint, direction, steps = 64) {
+      const startBearing = bearingDegrees(center, startPoint);
+      const endBearing = bearingDegrees(center, endPoint);
+      let totalSweep;
+
+      if (direction === "cw") {
+        totalSweep = endBearing >= startBearing ? endBearing - startBearing : (360 - startBearing) + endBearing;
+      } else {
+        totalSweep = startBearing >= endBearing ? startBearing - endBearing : startBearing + (360 - endBearing);
+      }
+
+      const points = [];
+      for (let i = 0; i <= steps; i += 1) {
+        const fraction = i / steps;
+        const bearing = direction === "cw"
+          ? (startBearing + (totalSweep * fraction)) % 360
+          : (startBearing - (totalSweep * fraction) + 360) % 360;
+        const point = destinationPoint(center, radiusMeters, bearing);
+        points.push([point.lat, point.lon]);
+      }
+      return points;
+    }
+
+    function ringLabelLatLng(lat, lon, radiusMeters) {
+      return [lat + (radiusMeters / METERS_PER_DEG_LAT), lon];
+    }
+
+    function makeRingLabel(text, lat, lon, radiusMeters) {
+      return L.marker(ringLabelLatLng(lat, lon, radiusMeters), {
+        interactive: false,
+        icon: L.divIcon({
+          className: "",
+          html: `<span class="ring-label">${text}</span>`,
+          iconSize: null
+        })
+      });
+    }
+
+    function buildModelProxyLayer() {
+      const specs = [
+        { airportName: "O'Hare International Airport", label: "Model ORD 10 NM", radiusNm: 10, color: "#8b5cf6", dashArray: "10 7" },
+        { airportName: "O'Hare International Airport", label: "Model ORD 15 NM", radiusNm: 15, color: "#7c3aed", dashArray: "16 8" },
+        { airportName: "Midway International Airport", label: "Model MDW 5 NM", radiusNm: 5, color: "#0f766e", dashArray: "8 6" },
+        { airportName: "Midway International Airport", label: "Model MDW 10 NM", radiusNm: 10, color: "#0ea5a5", dashArray: "14 7" }
+      ];
+
+      return L.layerGroup(
+        specs.flatMap((spec) => {
+          const airport = airports.find((item) => item.name === spec.airportName);
+          if (!airport) return [];
+
+          const radiusMeters = spec.radiusNm * NM_TO_METERS;
+          const circle = L.circle([airport.lat, airport.lon], {
+            radius: radiusMeters,
+            color: spec.color,
+            weight: 2,
+            opacity: 0.9,
+            dashArray: spec.dashArray,
+            fill: false
+          }).bindPopup(
+            `<b>${spec.label}</b><br>` +
+            `${spec.airportName}<br>` +
+            `Legacy circular proxy kept for comparison`
+          );
+
+          return [circle, makeRingLabel(spec.label, airport.lat, airport.lon, radiusMeters)];
+        })
+      );
+    }
+
+    function buildChicagoClassBShelfLayer() {
+      const poo = faaRef.ordPoo;
+      const mdw = faaRef.mdwLegal;
+      const poo5 = 5 * NM_TO_METERS;
+      const poo6 = 6 * NM_TO_METERS;
+      const poo10 = 10 * NM_TO_METERS;
+      const poo10_5 = 10.5 * NM_TO_METERS;
+      const poo15 = 15 * NM_TO_METERS;
+      const mdw5 = 5 * NM_TO_METERS;
+      const mdw10 = 10 * NM_TO_METERS;
+
+      const areaAStart = { lat: 42.0694444444, lon: -87.9252777778 };
+      const areaAEastArc = { lat: 41.9875000000, lon: -87.7930555556 };
+      const areaAEastLine = { lat: 41.9875000000, lon: -87.7708333333 };
+      const areaAI290South = { lat: 41.9533333333, lon: -88.0322222222 };
+      const areaAI290North = { lat: 42.0222222222, lon: -88.0308333333 };
+      const areaAUs12 = { lat: 42.0841666667, lon: -87.9405555556 };
+
+      const areaA5Arc = circleArc(poo, poo5, areaAStart, areaAEastArc, "cw", 28);
+      const areaA6ArcSouth = circleArc(poo, poo6, areaAEastLine, areaAI290South, "cw", 40);
+      const areaA6ArcNorth = circleArc(poo, poo6, areaAI290North, areaAUs12, "cw", 22);
+      const areaAPoints = [
+        [areaAStart.lat, areaAStart.lon],
+        ...areaA5Arc.slice(1),
+        [areaAEastLine.lat, areaAEastLine.lon],
+        ...areaA6ArcSouth.slice(1),
+        [areaAI290North.lat, areaAI290North.lon],
+        ...areaA6ArcNorth.slice(1)
+      ];
+
+      const areaBStart = { lat: 42.0658333333, lon: -87.8652777778 };
+      const areaBWillow = { lat: 42.1055555556, lon: -87.8272222222 };
+      const areaBWillowEast = { lat: 42.1011111111, lon: -87.7405555556 };
+      const areaBMdw5On10 = { lat: 41.8261111111, lon: -87.8500000000 };
+      const areaBMdw5On10_5 = { lat: 41.8163888889, lon: -87.8561111111 };
+      const areaBMdw10On10_5 = { lat: 41.8197222222, lon: -87.9705555556 };
+      const areaBMdw10On10 = { lat: 41.8277777778, lon: -87.9680555556 };
+      const areaBUs12 = { lat: 42.1338888889, lon: -88.0122222222 };
+      const areaBBackTo5 = { lat: 42.0694444444, lon: -87.9252777778 };
+
+      const areaB10ArcEast = circleArc(poo, poo10, areaBWillowEast, areaBMdw5On10, "cw", 44);
+      const areaBMdw5Arc = circleArc(mdw, mdw5, areaBMdw5On10, areaBMdw5On10_5, "ccw", 12);
+      const areaB10_5Arc = circleArc(poo, poo10_5, areaBMdw5On10_5, areaBMdw10On10_5, "cw", 22);
+      const areaBMdw10Arc = circleArc(mdw, mdw10, areaBMdw10On10_5, areaBMdw10On10, "cw", 14);
+      const areaB10ArcWest = circleArc(poo, poo10, areaBMdw10On10, areaBUs12, "cw", 50);
+      const areaB5Arc = circleArc(poo, poo5, areaBBackTo5, areaBStart, "cw", 10);
+      const areaBPoints = [
+        [areaBStart.lat, areaBStart.lon],
+        [areaBWillow.lat, areaBWillow.lon],
+        [areaBWillowEast.lat, areaBWillowEast.lon],
+        ...areaB10ArcEast.slice(1),
+        ...areaBMdw5Arc.slice(1),
+        ...areaB10_5Arc.slice(1),
+        ...areaBMdw10Arc.slice(1),
+        ...areaB10ArcWest.slice(1),
+        [areaBBackTo5.lat, areaBBackTo5.lon],
+        ...areaB5Arc.slice(1)
+      ];
+
+      const layers = [];
+
+      layers.push(
+        L.polygon(areaAPoints, {
+          color: "#9f1239",
+          weight: 2.8,
+          opacity: 0.96,
+          fillColor: "#fda4af",
+          fillOpacity: 0.2
+        }).bindPopup(
+          `<b>Chicago Class B Area A</b><br>` +
+          `Inner core footprint<br>` +
+          `Surface to 10,000 MSL reference slice`
+        )
+      );
+
+      layers.push(
+        L.polygon(areaBPoints, {
+          color: "#ea580c",
+          weight: 2.8,
+          opacity: 0.94,
+          fillColor: "#fdba74",
+          fillOpacity: 0.14
+        }).bindPopup(
+          `<b>Chicago Class B Area B</b><br>` +
+          `Outer low-altitude shelf footprint<br>` +
+          `Approximation from FAA legal points for visual comparison`
+        )
+      );
+
+      layers.push(
+        L.circle([poo.lat, poo.lon], {
+          radius: poo15,
+          color: "#be123c",
+          weight: 1.4,
+          opacity: 0.45,
+          dashArray: "10 10",
+          fill: false
+        }).bindPopup("15 NM point-of-origin guide for the current model's broad ORD airspace proxy.")
+      );
+
+      layers.push(
+        makeRingLabel("Area A Core", 42.01, -87.91, 0),
+        makeRingLabel("FAA Area B", 41.96, -87.86, 0),
+        makeRingLabel("15 NM Guide", poo.lat, poo.lon, poo15)
+      );
+
+      return L.layerGroup(layers);
+    }
+
+    const modelProxyLayer = buildModelProxyLayer().addTo(map);
+    const classBShelfLayer = buildChicagoClassBShelfLayer().addTo(map);
+
+    L.control.layers(
+      null,
+      {
+        "Reference route": referenceLayer,
+        "Airports": airportLayer,
+        "Legacy proxy rings": modelProxyLayer,
+        "FAA-like Class B shelf reference": classBShelfLayer
+      },
+      { collapsed: false, position: "topright" }
+    ).addTo(map);
+
+    const infoControl = L.control({ position: "bottomleft" });
+    infoControl.onAdd = function() {
+      const div = L.DomUtil.create("div", "info-box");
+      div.innerHTML = `
+        <div class="info-title">Comparison Notes</div>
+        <p><b>Legacy proxy rings</b> preserve the older circular visualization so you can compare it against the shelf-based airspace model.</p>
+        <p><b>FAA-like Class B shelf reference</b> shows separate shelf footprints so the map reads more like the upside-down wedding cake: the smaller inner core and the broader outer shelf.</p>
+        <p>This page is for comparison only. It does not change the generated risk grid or route-cost model.</p>
+      `;
+      return div;
+    };
+    infoControl.addTo(map);
 
     document.getElementById("btnCombined").addEventListener("click", () => showGridLayer("combined"));
     document.getElementById("btnAir").addEventListener("click", () => showGridLayer("air"));
@@ -706,13 +946,12 @@
         const bounds = gridLayers.combined.getBounds();
         if (bounds.isValid()) {
           map.fitBounds(bounds.pad(0.02), { animate: false });
-          map.setMaxBounds(STUDY_BOUNDS.pad(0.04));
         }
 
         const featureCount = (data.features || []).length.toLocaleString();
         statusEl.textContent = demotedCount > 0
-          ? `${featureCount} cells loaded. ${demotedCount.toLocaleString()} stale lab cells adjusted.`
-          : `${featureCount} cells loaded.`;
+          ? `${featureCount} cells loaded. Layered Class B shelf overlay enabled. ${demotedCount.toLocaleString()} stale lab cells adjusted.`
+          : `${featureCount} cells loaded. Layered Class B shelf overlay enabled.`;
       })
       .catch(showLoadError);
 

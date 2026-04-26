@@ -44,15 +44,6 @@ ROUTE_SPECS = [
         "color": "#f59e0b",
     },
     {
-        "name": "flight_density_only",
-        "label": "Flight Density Only",
-        "distance_weight": 0.0,
-        "population_weight": 0.0,
-        "airspace_weight": 0.0,
-        "traffic_weight": 1.0,
-        "color": "#7c3aed",
-    },
-    {
         "name": "population_only",
         "label": "Population Only",
         "distance_weight": 0.0,
@@ -71,22 +62,13 @@ ROUTE_SPECS = [
         "color": "#16a34a",
     },
     {
-        "name": "airspace_only",
-        "label": "Airspace Only",
-        "distance_weight": 0.0,
-        "population_weight": 0.0,
-        "airspace_weight": 1.0,
-        "traffic_weight": 0.0,
-        "color": "#f59e0b",
-    },
-    {
         "name": "air_traffic_only",
         "label": "Air Flight Density Only",
         "distance_weight": 0.0,
         "population_weight": 0.0,
         "airspace_weight": 0.0,
         "traffic_weight": 1.0,
-        "color": "#9333ea",
+        "color": "#7c3aed",
     },
 ]
 
@@ -321,9 +303,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     );
     const map = L.map("map", {{
       center: [41.84, -87.93],
-      zoom: 10,
-      maxBounds: STUDY_BOUNDS.pad(0.04),
-      maxBoundsViscosity: 0.9
+      zoom: 10
     }});
     const routeData = {route_data};
     const datasetOrder = {dataset_order};
@@ -340,8 +320,13 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     startMarker.addTo(map);
     destinationMarker.addTo(map);
 
-    const allBounds = L.latLngBounds([startPoint.lat, startPoint.lon], [destinationPoint.lat, destinationPoint.lon]);
-    const routeDefinitions = {route_definitions};
+    const defaultRouteDefinitions = {route_definitions};
+    const availableRouteNames = new Set(
+      routeData.features.map((feature) => feature.properties?.route_name).filter(Boolean)
+    );
+    const routeDefinitions = defaultRouteDefinitions
+      .filter((routeDefinition) => availableRouteNames.has(routeDefinition.name))
+      .map((routeDefinition) => ({{ ...routeDefinition }}));
     const activeRouteLayers = {{}};
     // Index features by dataset slug and route name so a date switch only swaps
     // the visible route geometry, not the whole map.
@@ -349,7 +334,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     const dateToggle = document.getElementById("dateToggle");
     const routeToggle = document.getElementById("routeToggle");
     const statusEl = document.getElementById("status");
-    let activeRouteName = "combined";
+    let activeDatasetSlug = datasetOrder[0]?.slug || null;
+    let activeRouteNames = new Set(["combined"]);
 
     function formatDatasetLabel(dateLabel) {{
       if (/^(Sun|Mon|Tue|Wed|Thu|Fri|Sat)\\s/.test(dateLabel)) {{
@@ -375,6 +361,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         datasetLayers.set(properties.dataset_slug, {{}});
       }}
       datasetLayers.get(properties.dataset_slug)[properties.route_name] = feature;
+
+      const routeDefinition = routeDefinitions.find((item) => item.name === properties.route_name);
+      if (routeDefinition) {{
+        routeDefinition.label = properties.route_label || routeDefinition.label;
+        routeDefinition.color = properties.color || routeDefinition.color;
+      }}
     }});
 
     routeDefinitions.forEach((routeDefinition) => {{
@@ -409,24 +401,24 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     }}
 
     function showDataset(datasetSlug) {{
+      activeDatasetSlug = datasetSlug;
       const routeLayerMap = datasetLayers.get(datasetSlug) || {{}};
       Object.entries(activeRouteLayers).forEach(([routeName, layer]) => {{
         const feature = routeLayerMap[routeName];
         layer.clearLayers();
         if (feature) {{
           layer.addData(feature);
-          allBounds.extend(layer.getBounds());
         }}
       }});
 
       setActiveDateButton(datasetSlug);
-      showRoute(activeRouteName);
+      syncVisibleRoutes();
     }}
 
-    function showRoute(routeName) {{
-      activeRouteName = routeName;
+    function syncVisibleRoutes() {{
+      const routeLayerMap = datasetLayers.get(activeDatasetSlug) || {{}};
       Object.entries(activeRouteLayers).forEach(([name, layer]) => {{
-        if (name === routeName && layer.getLayers().length > 0) {{
+        if (activeRouteNames.has(name) && routeLayerMap[name] && layer.getLayers().length > 0) {{
           layer.addTo(map);
         }} else {{
           map.removeLayer(layer);
@@ -434,14 +426,32 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       }});
 
       Array.from(routeToggle.querySelectorAll("button")).forEach((button) => {{
-        button.classList.toggle("active", button.dataset.route === routeName);
+        const isActive = activeRouteNames.has(button.dataset.route);
+        button.classList.toggle("active", isActive);
+        button.setAttribute("aria-pressed", isActive ? "true" : "false");
       }});
 
-      const routeDefinition = routeDefinitions.find((item) => item.name === routeName);
       const activeDate = dateToggle.querySelector("button.active");
-      if (statusEl && routeDefinition && activeDate) {{
-        statusEl.textContent = routeDefinition.label + " route, " + activeDate.textContent + " traffic dataset";
+      const activeLabels = routeDefinitions
+        .filter((item) => activeRouteNames.has(item.name) && routeLayerMap[item.name])
+        .map((item) => item.label);
+      if (statusEl && activeDate) {{
+        statusEl.textContent = activeLabels.length
+          ? activeLabels.join(", ") + " routes, " + activeDate.textContent + " traffic dataset"
+          : "No route data available for " + activeDate.textContent + " traffic dataset";
       }}
+    }}
+
+    function toggleRoute(routeName) {{
+      if (activeRouteNames.has(routeName)) {{
+        if (activeRouteNames.size === 1) {{
+          return;
+        }}
+        activeRouteNames.delete(routeName);
+      }} else {{
+        activeRouteNames.add(routeName);
+      }}
+      syncVisibleRoutes();
     }}
 
     routeDefinitions.forEach((routeDefinition) => {{
@@ -449,7 +459,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       button.type = "button";
       button.dataset.route = routeDefinition.name;
       button.textContent = routeDefinition.label;
-      button.addEventListener("click", () => showRoute(routeDefinition.name));
+      button.setAttribute("aria-pressed", activeRouteNames.has(routeDefinition.name) ? "true" : "false");
+      button.addEventListener("click", () => toggleRoute(routeDefinition.name));
       routeToggle.appendChild(button);
     }});
 
@@ -473,32 +484,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       `).join("");
       div.innerHTML = `
         <div style="font-weight:700; margin-bottom:6px;">{page_title}</div>
-        <div class="legend-row">
-          <span class="swatch-line" style="border-top-color:#dc2626;"></span>
-          <span>Combined</span>
-        </div>
-        <div class="legend-row">
-          <span class="swatch-line" style="border-top-color:#2563eb;"></span>
-          <span>Population Only</span>
-        </div>
-        <div class="legend-row">
-          <span class="swatch-line" style="border-top-color:#16a34a;"></span>
-          <span>Distance Only</span>
-        </div>
-        <div class="legend-row">
-          <span class="swatch-line" style="border-top-color:#f59e0b;"></span>
-          <span>Airspace Only</span>
-        </div>
-        <div class="legend-row">
-          <span class="swatch-line" style="border-top-color:#9333ea;"></span>
-          <span>Air Flight Density Only</span>
-        </div>
+        ${{legendRows}}
       `;
       return div;
     }};
     legend.addTo(map);
 
-    map.fitBounds(STUDY_BOUNDS, {{ padding: [20, 20] }});
     showDataset(datasetOrder[0].slug);
   </script>
 </body>
