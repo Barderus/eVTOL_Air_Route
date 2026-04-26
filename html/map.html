@@ -302,6 +302,8 @@
 
     const colors = {
       low: "#2ca25f",
+      mediumCombined: "#f4b183",
+      highCombined: "#c84c5a",
       mediumAir: "#f1c40f",
       highAir: "#b30000",
       mediumPop: "#6baed6",
@@ -530,17 +532,8 @@
     function colorCombined(feature) {
       const p = feature.properties || {};
       if (p.density_type === "no-fly" || p.risk_class === "No-Fly") return colors.noFly;
-
-      if (p.density_type === "population") {
-        if (p.pop_class === "High") return colors.highPop;
-        if (p.pop_class === "Medium") return colors.mediumPop;
-      }
-
-      if (p.density_type === "airspace") {
-        if (p.air_class === "High") return colors.highAir;
-        if (p.air_class === "Medium") return colors.mediumAir;
-      }
-
+      if (p.risk_class === "High") return colors.highCombined;
+      if (p.risk_class === "Medium") return colors.mediumCombined;
       return colors.low;
     }
 
@@ -651,10 +644,8 @@
 
       return [
         ["Low combined risk", colors.low],
-        ["Population medium", colors.mediumPop],
-        ["Population high", colors.highPop],
-        ["Airspace medium", colors.mediumAir],
-        ["Airspace high", colors.highAir]
+        ["Medium combined risk", colors.mediumCombined],
+        ["High combined risk", colors.highCombined]
       ];
     }
 

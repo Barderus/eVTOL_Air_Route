@@ -292,6 +292,8 @@
 
     const colors = {
       low: "#2ca25f",
+      mediumCombined: "#f4b183",
+      highCombined: "#c84c5a",
       mediumAir: "#f1c40f",
       highAir: "#b30000",
       mediumPop: "#6baed6",
@@ -462,17 +464,8 @@
     function colorCombined(feature) {
       const p = feature.properties || {};
       if (p.density_type === "no-fly" || p.risk_class === "No-Fly") return colors.noFly;
-
-      if (p.density_type === "population") {
-        if (p.pop_class === "High") return colors.highPop;
-        if (p.pop_class === "Medium") return colors.mediumPop;
-      }
-
-      if (p.density_type === "airspace") {
-        if (p.air_class === "High") return colors.highAir;
-        if (p.air_class === "Medium") return colors.mediumAir;
-      }
-
+      if (p.risk_class === "High") return colors.highCombined;
+      if (p.risk_class === "Medium") return colors.mediumCombined;
       return colors.low;
     }
 
@@ -588,10 +581,8 @@
 
       return [
         ["Low combined risk", colors.low],
-        ["Population medium", colors.mediumPop],
-        ["Population high", colors.highPop],
-        ["Airspace medium", colors.mediumAir],
-        ["Airspace high", colors.highAir]
+        ["Medium combined risk", colors.mediumCombined],
+        ["High combined risk", colors.highCombined]
       ];
     }
 
@@ -753,48 +744,34 @@
       });
     }
 
-    function buildModelProxyLayer() {
-      const specs = [
-        { airportName: "O'Hare International Airport", label: "Model ORD 10 NM", radiusNm: 10, color: "#8b5cf6", dashArray: "10 7" },
-        { airportName: "O'Hare International Airport", label: "Model ORD 15 NM", radiusNm: 15, color: "#7c3aed", dashArray: "16 8" },
-        { airportName: "Midway International Airport", label: "Model MDW 5 NM", radiusNm: 5, color: "#0f766e", dashArray: "8 6" },
-        { airportName: "Midway International Airport", label: "Model MDW 10 NM", radiusNm: 10, color: "#0ea5a5", dashArray: "14 7" }
-      ];
+    function circlePolygon(center, radiusMeters, steps = 96) {
+      return Array.from({ length: steps }, (_, index) => {
+        const point = destinationPoint(center, radiusMeters, (360 * index) / steps);
+        return [point.lat, point.lon];
+      });
+    }
 
-      return L.layerGroup(
-        specs.flatMap((spec) => {
-          const airport = airports.find((item) => item.name === spec.airportName);
-          if (!airport) return [];
-
-          const radiusMeters = spec.radiusNm * NM_TO_METERS;
-          const circle = L.circle([airport.lat, airport.lon], {
-            radius: radiusMeters,
-            color: spec.color,
-            weight: 2,
-            opacity: 0.9,
-            dashArray: spec.dashArray,
-            fill: false
-          }).bindPopup(
-            `<b>${spec.label}</b><br>` +
-            `${spec.airportName}<br>` +
-            `Legacy circular proxy kept for comparison`
-          );
-
-          return [circle, makeRingLabel(spec.label, airport.lat, airport.lon, radiusMeters)];
-        })
-      );
+    function sectorPolygon(center, radiusMeters, startBearing, endBearing, steps = 32) {
+      const finalBearing = endBearing < startBearing ? endBearing + 360 : endBearing;
+      const arc = Array.from({ length: steps + 1 }, (_, index) => {
+        const bearing = (startBearing + ((finalBearing - startBearing) * (index / steps))) % 360;
+        const point = destinationPoint(center, radiusMeters, bearing);
+        return [point.lat, point.lon];
+      });
+      return [[center.lat, center.lon], ...arc, [center.lat, center.lon]];
     }
 
     function buildChicagoClassBShelfLayer() {
       const poo = faaRef.ordPoo;
       const mdw = faaRef.mdwLegal;
+      const lewis = { lat: 41.60690586957971, lon: -88.09526487573747 };
       const poo5 = 5 * NM_TO_METERS;
       const poo6 = 6 * NM_TO_METERS;
       const poo10 = 10 * NM_TO_METERS;
       const poo10_5 = 10.5 * NM_TO_METERS;
-      const poo15 = 15 * NM_TO_METERS;
       const mdw5 = 5 * NM_TO_METERS;
       const mdw10 = 10 * NM_TO_METERS;
+      const lewis4_1 = 4.1 * NM_TO_METERS;
 
       const areaAStart = { lat: 42.0694444444, lon: -87.9252777778 };
       const areaAEastArc = { lat: 41.9875000000, lon: -87.7930555556 };
@@ -844,6 +821,26 @@
         ...areaB5Arc.slice(1)
       ];
 
+      const shorelineNorth = { lat: 41.8691666667, lon: -87.6163888889 };
+      const shorelineSouth = { lat: 41.7497222222, lon: -87.5350000000 };
+      const mdwLakeEast = eastLineCircleIntersection(shorelineNorth, mdw, mdw10);
+      const midwayShelfLand = [
+        [areaBMdw5On10.lat, areaBMdw5On10.lon],
+        [shorelineNorth.lat, shorelineNorth.lon],
+        [shorelineSouth.lat, shorelineSouth.lon],
+        ...circleArc(mdw, mdw10, shorelineSouth, areaBMdw10On10_5, "cw", 48).slice(1),
+        ...circleArc(poo, poo10_5, areaBMdw10On10_5, areaBMdw5On10_5, "ccw", 22).slice(1),
+        ...circleArc(mdw, mdw5, areaBMdw5On10_5, areaBMdw5On10, "ccw", 16).slice(1)
+      ];
+      const midwayShelfLake = [
+        [shorelineNorth.lat, shorelineNorth.lon],
+        [mdwLakeEast.lat, mdwLakeEast.lon],
+        ...circleArc(mdw, mdw10, mdwLakeEast, shorelineSouth, "cw", 24).slice(1),
+        [shorelineSouth.lat, shorelineSouth.lon]
+      ];
+      const lewisOuter = circlePolygon(lewis, lewis4_1, 128);
+      const lewisCutout = sectorPolygon(lewis, lewis4_1, 322, 18, 28);
+
       const layers = [];
 
       layers.push(
@@ -875,26 +872,61 @@
       );
 
       layers.push(
-        L.circle([poo.lat, poo.lon], {
-          radius: poo15,
-          color: "#be123c",
-          weight: 1.4,
-          opacity: 0.45,
-          dashArray: "10 10",
-          fill: false
-        }).bindPopup("15 NM point-of-origin guide for the current model's broad ORD airspace proxy.")
+        L.polygon(circlePolygon(mdw, mdw5, 96), {
+          color: "#115e59",
+          weight: 2.5,
+          opacity: 0.96,
+          fillColor: "#99f6e4",
+          fillOpacity: 0.18
+        }).bindPopup(
+          `<b>Midway Core</b><br>` +
+          `5 NM Class C core used in the current airspace model`
+        )
       );
 
       layers.push(
-        makeRingLabel("Area A Core", 42.01, -87.91, 0),
-        makeRingLabel("FAA Area B", 41.96, -87.86, 0),
-        makeRingLabel("15 NM Guide", poo.lat, poo.lon, poo15)
+        L.polygon(midwayShelfLand, {
+          color: "#0f766e",
+          weight: 2.5,
+          opacity: 0.94,
+          fillColor: "#5eead4",
+          fillOpacity: 0.14
+        }).bindPopup(
+          `<b>Midway Shelf</b><br>` +
+          `5-10 NM land portion with ORD Class B exclusion`
+        )
+      );
+
+      layers.push(
+        L.polygon(midwayShelfLake, {
+          color: "#0284c7",
+          weight: 2.5,
+          opacity: 0.94,
+          fillColor: "#7dd3fc",
+          fillOpacity: 0.12
+        }).bindPopup(
+          `<b>Midway Lake Shelf</b><br>` +
+          `5-10 NM lakefront shelf portion`
+        )
+      );
+
+      layers.push(
+        L.polygon([lewisOuter, lewisCutout], {
+          color: "#a16207",
+          weight: 2.6,
+          opacity: 0.96,
+          fillColor: "#fde68a",
+          fillOpacity: 0.16,
+          fillRule: "evenodd"
+        }).bindPopup(
+          `<b>Lewis University Airspace</b><br>` +
+          `4.1 NM Class D with approximate Clow cutout`
+        )
       );
 
       return L.layerGroup(layers);
     }
 
-    const modelProxyLayer = buildModelProxyLayer().addTo(map);
     const classBShelfLayer = buildChicagoClassBShelfLayer().addTo(map);
 
     L.control.layers(
@@ -902,24 +934,10 @@
       {
         "Reference route": referenceLayer,
         "Airports": airportLayer,
-        "Legacy proxy rings": modelProxyLayer,
-        "FAA-like Class B shelf reference": classBShelfLayer
+        "Class B shelf": classBShelfLayer
       },
       { collapsed: false, position: "topright" }
     ).addTo(map);
-
-    const infoControl = L.control({ position: "bottomleft" });
-    infoControl.onAdd = function() {
-      const div = L.DomUtil.create("div", "info-box");
-      div.innerHTML = `
-        <div class="info-title">Comparison Notes</div>
-        <p><b>Legacy proxy rings</b> preserve the older circular visualization so you can compare it against the shelf-based airspace model.</p>
-        <p><b>FAA-like Class B shelf reference</b> shows separate shelf footprints so the map reads more like the upside-down wedding cake: the smaller inner core and the broader outer shelf.</p>
-        <p>This page is for comparison only. It does not change the generated risk grid or route-cost model.</p>
-      `;
-      return div;
-    };
-    infoControl.addTo(map);
 
     document.getElementById("btnCombined").addEventListener("click", () => showGridLayer("combined"));
     document.getElementById("btnAir").addEventListener("click", () => showGridLayer("air"));
@@ -950,8 +968,8 @@
 
         const featureCount = (data.features || []).length.toLocaleString();
         statusEl.textContent = demotedCount > 0
-          ? `${featureCount} cells loaded. Layered Class B shelf overlay enabled. ${demotedCount.toLocaleString()} stale lab cells adjusted.`
-          : `${featureCount} cells loaded. Layered Class B shelf overlay enabled.`;
+          ? `${featureCount} cells loaded. Unified airspace overlay enabled. ${demotedCount.toLocaleString()} stale lab cells adjusted.`
+          : `${featureCount} cells loaded. Unified airspace overlay enabled.`;
       })
       .catch(showLoadError);
 

@@ -17,17 +17,17 @@ TRAFFIC_CSV_PATH = (
 )
 TRAFFIC_CHUNK_SIZE = 200_000
 
-# Keep all normalized terms in a comparable range, but bias the combined route
-# toward avoiding constrained airport airspace and observed traffic density.
+# Keep all normalized terms in a comparable range and match the route weights
+# used by the generated HTML pages so standalone runs and exported pages agree.
 DISTANCE_WEIGHT = 0.8
 POPULATION_WEIGHT = 0.9
-AIRSPACE_WEIGHT = 1.1
-TRAFFIC_WEIGHT = 1.4
+AIRSPACE_WEIGHT = 1.4
+TRAFFIC_WEIGHT = 1.0
 
 ROUTE_SPECS = [
     {
         "name": "combined",
-        "label": "Combined Cost",
+        "label": "Combined",
         "distance_weight": DISTANCE_WEIGHT,
         "population_weight": POPULATION_WEIGHT,
         "airspace_weight": AIRSPACE_WEIGHT,
