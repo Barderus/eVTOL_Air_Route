@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 
@@ -12,6 +14,10 @@ OHARE_LON = -87.90902412382081
 MIDWAY_LAT = 41.7856116663475
 MIDWAY_LON = -87.75331135429448
 TIME_WINDOWS = [1, 3, 6, 9, 12, 24]
+CELL_SIZE_M = 500.0
+EARTH_RADIUS_M = 6378137.0
+STUDY_BOUNDS = ((41.48, -88.34), (42.21, -87.52))
+HEATMAP_MIN_CELL_COUNT = 2
 METERS_TO_FEET = 3.28084
 GROUND_ELEVATION_FT_MSL = 680.0
 
@@ -102,6 +108,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   <div id="map"></div>
   <div class="panel">
     <h1>Greater Chicago Flight Density</h1>
+    <div class="metric">Dataset: {dataset_date}</div>
     <div class="metric">Rows: {row_count}</div>
     <div class="metric">Flights: {flight_count}</div>
     <div class="metric">Track stride: {track_stride}</div>
@@ -116,6 +123,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     // Pre-bucket observations by time window so the browser only swaps arrays
     // when the user changes the horizon.
     const windowedObservations = {observation_data};
+    const windowedHeatmap = {heatmap_data};
     const bounds = {bounds};
     const timeButtons = {time_buttons};
 
@@ -165,8 +173,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     }}
 
     function drawForHours(hours) {{
+      const heatRows = windowedHeatmap[String(hours)] || [];
       const rows = windowedObservations[String(hours)] || [];
-      const heatPoints = rows.map((row) => [row.lat, row.lon, 1.0]);
+      const heatMax = heatRows.reduce((maxValue, row) => Math.max(maxValue, row.count), 0) || 1;
+      const heatPoints = heatRows.map((row) => [row.lat, row.lon, row.count / heatMax]);
       heatLayer.setLatLngs(heatPoints);
 
       trackLayer.clearLayers();
@@ -334,7 +344,15 @@ def load_flight_data(csv_path: Path) -> pd.DataFrame:
     return data
 
 
-def build_windowed_observations(data: pd.DataFrame) -> dict[str, list[dict[str, int | float | str]]]:
+def lonlat_to_web_mercator(lon: np.ndarray, lat: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    lon_rad = np.deg2rad(lon)
+    lat_rad = np.deg2rad(lat)
+    x = EARTH_RADIUS_M * lon_rad
+    y = EARTH_RADIUS_M * np.log(np.tan(np.pi / 4.0 + lat_rad / 2.0))
+    return x, y
+
+
+def build_windowed_tracks(data: pd.DataFrame) -> dict[str, list[dict[str, int | float | str]]]:
     start_epoch = int(data["time"].min())
     windowed: dict[str, list[dict[str, int | float | str]]] = {}
 
@@ -346,13 +364,59 @@ def build_windowed_observations(data: pd.DataFrame) -> dict[str, list[dict[str, 
     return windowed
 
 
+def build_windowed_heatmap(data: pd.DataFrame) -> dict[str, list[dict[str, int | float | str]]]:
+    start_epoch = int(data["time"].min())
+    windowed: dict[str, list[dict[str, int | float | str]]] = {}
+    (south, west), (north, east) = STUDY_BOUNDS
+    xmin, ymin = lonlat_to_web_mercator(np.array([west]), np.array([south]))
+    xmin = float(xmin[0])
+    ymin = float(ymin[0])
+    # Align to the same projected grid used by make_grid.py.
+
+    for hours in TIME_WINDOWS:
+        cutoff = start_epoch + hours * 3600
+        rows = data[data["time"] < cutoff][["lat", "lon", "icao24"]].copy()
+        if rows.empty:
+            windowed[str(hours)] = []
+            continue
+
+        x, y = lonlat_to_web_mercator(rows["lon"].to_numpy(), rows["lat"].to_numpy())
+        rows["cell_x"] = np.floor((x - xmin) / CELL_SIZE_M).astype(int)
+        rows["cell_y"] = np.floor((y - ymin) / CELL_SIZE_M).astype(int)
+
+        cell_counts = (
+            rows.drop_duplicates(subset=["cell_x", "cell_y", "icao24"])
+            .groupby(["cell_x", "cell_y"], as_index=False)
+            .agg(count=("icao24", "size"))
+        )
+        cell_counts = cell_counts[cell_counts["count"] >= HEATMAP_MIN_CELL_COUNT]
+
+        if cell_counts.empty:
+            windowed[str(hours)] = []
+            continue
+
+        cell_x = cell_counts["cell_x"].to_numpy(dtype=float)
+        cell_y = cell_counts["cell_y"].to_numpy(dtype=float)
+        center_x = xmin + (cell_x + 0.5) * CELL_SIZE_M
+        center_y = ymin + (cell_y + 0.5) * CELL_SIZE_M
+        lon = np.rad2deg(center_x / EARTH_RADIUS_M)
+        lat = np.rad2deg(2.0 * np.arctan(np.exp(center_y / EARTH_RADIUS_M)) - np.pi / 2.0)
+
+        windowed[str(hours)] = [
+            {"lat": float(lat[idx]), "lon": float(lon[idx]), "count": int(cell_counts.iloc[idx]["count"])}
+            for idx in range(len(cell_counts))
+        ]
+
+    return windowed
+
+
 def parse_args() -> argparse.Namespace:
     folder = Path(__file__).resolve().parent
     parser = argparse.ArgumentParser(description="Create a Leaflet map from an OpenSky CSV file.")
     parser.add_argument(
         "csv_path",
         nargs="?",
-        default=folder.parent / "opensky" / "output" / "ohare_2019-03-09_local_30s_15nm_bbox.csv",
+        default=folder.parent / "opensky" / "output" / "ohare_2026-03-09_1s_15nm_bbox.csv",
         type=Path,
         help="CSV file to read.",
     )
@@ -371,6 +435,8 @@ def main() -> None:
     args = parse_args()
     data = load_flight_data(args.csv_path)
     data = data.sort_values(["icao24", "time"]).reset_index(drop=True)
+    dataset_date_match = re.search(r"(\d{4}-\d{2}-\d{2})", args.csv_path.name)
+    dataset_date = dataset_date_match.group(1) if dataset_date_match else args.csv_path.stem
 
     track_stride = max(1, args.track_stride)
     arrow_repeat = max(40, args.arrow_stride * 12)
@@ -378,19 +444,23 @@ def main() -> None:
     # Sample each flight independently so dense tracks stay legible without
     # erasing shorter flights from the visualization.
     sampled_data = data[data.groupby("icao24").cumcount() % track_stride == 0].reset_index(drop=True)
-    windowed_observations = build_windowed_observations(sampled_data)
+    windowed_tracks = build_windowed_tracks(sampled_data)
+    windowed_heatmap = build_windowed_heatmap(data)
 
     html = HTML_TEMPLATE.format(
         row_count=len(data),
         flight_count=data["icao24"].nunique(),
         track_stride=track_stride,
         arrow_stride=args.arrow_stride,
-        observation_data=json.dumps(windowed_observations),
+        dataset_date=dataset_date,
+        observation_data=json.dumps(windowed_tracks),
+        heatmap_data=json.dumps(windowed_heatmap),
         time_buttons=json.dumps(TIME_WINDOWS),
+        end_time_epoch=int(data["time"].max()),
         bounds=json.dumps(
             [
-                [float(data["lat"].min()), float(data["lon"].min())],
-                [float(data["lat"].max()), float(data["lon"].max())],
+                [float(STUDY_BOUNDS[0][0]), float(STUDY_BOUNDS[0][1])],
+                [float(STUDY_BOUNDS[1][0]), float(STUDY_BOUNDS[1][1])],
             ]
         ),
         arrow_repeat=arrow_repeat,

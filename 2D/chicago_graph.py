@@ -19,7 +19,7 @@ TRAFFIC_CHUNK_SIZE = 200_000
 
 # Keep all normalized terms in a comparable range and match the route weights
 # used by the generated HTML pages so standalone runs and exported pages agree.
-DISTANCE_WEIGHT = 0.8
+DISTANCE_WEIGHT = 0.6
 POPULATION_WEIGHT = 0.9
 AIRSPACE_WEIGHT = 1.4
 TRAFFIC_WEIGHT = 1.0
@@ -68,11 +68,44 @@ ROUTE_SPECS = [
 ]
 
 
-def normalize(values: np.ndarray) -> tuple[np.ndarray, float]:
-    maximum = float(np.max(values))
-    if maximum <= 0:
-        return np.zeros_like(values, dtype=float), 1.0
-    return values / maximum, maximum
+def normalize(
+    values: np.ndarray,
+    *,
+    clip_percentile: float | None = None,
+    transform: str | None = None,
+    power: float = 1.0,
+) -> tuple[np.ndarray, float]:
+    array = np.asarray(values, dtype=float)
+    array = np.clip(array, 0.0, None)
+
+    if transform == "log1p":
+        array = np.log1p(array)
+    elif transform is not None:
+        raise ValueError(f"Unsupported transform: {transform}")
+
+    if clip_percentile is None:
+        maximum = float(np.max(array))
+        if maximum <= 0:
+            return np.zeros_like(array, dtype=float), 1.0
+        normalized = array / maximum
+        if power != 1.0:
+            normalized = np.power(normalized, power)
+        return normalized, maximum
+
+    positive = array[array > 0]
+    if positive.size == 0:
+        return np.zeros_like(array, dtype=float), 1.0
+
+    scale = float(np.percentile(positive, clip_percentile))
+    if scale <= 0:
+        scale = float(np.max(positive))
+    if scale <= 0:
+        return np.zeros_like(array, dtype=float), 1.0
+
+    normalized = np.clip(array / scale, 0.0, 1.0)
+    if power != 1.0:
+        normalized = np.power(normalized, power)
+    return normalized, scale
 
 
 def path_cost(graph: nx.Graph, path: list[int], weight: str) -> float:
@@ -290,8 +323,13 @@ def main() -> None:
     airspace_risk = grid["airport_risk_combined"].to_numpy(dtype=float)
     traffic_risk = grid["traffic_density"].to_numpy(dtype=float)
     city_risk_norm, city_risk_max = normalize(city_risk)
-    airspace_risk_norm, airspace_risk_max = normalize(airspace_risk)
-    traffic_risk_norm, traffic_risk_max = normalize(traffic_risk)
+    airspace_risk_norm, airspace_risk_max = normalize(airspace_risk, clip_percentile=99.0, power=0.75)
+    traffic_risk_norm, traffic_risk_max = normalize(
+        traffic_risk,
+        clip_percentile=95.0,
+        transform="log1p",
+        power=0.75,
+    )
     max_edge_distance = assign_edge_weights(
         graph,
         cent_x,
@@ -312,7 +350,7 @@ def main() -> None:
     print("  distance max edge (m):", max_edge_distance)
     print("  city_risk max:", city_risk_max)
     print("  airport_risk_combined max:", airspace_risk_max)
-    print("  traffic_density max (obs/km^2):", traffic_risk_max)
+    print("  traffic_density scale (log1p pct):", traffic_risk_max)
     print("Route weights:")
     print("  combined:", DISTANCE_WEIGHT, POPULATION_WEIGHT, AIRSPACE_WEIGHT, TRAFFIC_WEIGHT)
 

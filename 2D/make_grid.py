@@ -359,6 +359,7 @@ def radial_decay(d_m, A, S_m):
 AIRSPACE_HIGH_VAL = 1.0
 AIRSPACE_MED_PEAK = 0.6
 AIRSPACE_DECAY_S_M = 8000.0
+AIRSPACE_DECAY_MAX_DISTANCE_M = 3 * CELL_SIZE_M
 
 grid_m["airport_airspace_high"] = 0.0
 grid_m["airport_airspace_med"]  = 0.0
@@ -380,8 +381,9 @@ grid_m.loc[in_ord_medium, "airport_airspace_med"] = np.maximum(
 )
 
 ord_decay = np.zeros(len(grid_m), dtype=float)
-ord_decay[outside_ord_area_b.to_numpy()] = radial_decay(
-    ord_boundary_distance[outside_ord_area_b.to_numpy()],
+ord_decay_mask = outside_ord_area_b.to_numpy() & (ord_boundary_distance <= AIRSPACE_DECAY_MAX_DISTANCE_M)
+ord_decay[ord_decay_mask] = radial_decay(
+    ord_boundary_distance[ord_decay_mask],
     A=AIRSPACE_MED_PEAK,
     S_m=AIRSPACE_DECAY_S_M
 )
@@ -402,8 +404,9 @@ grid_m.loc[in_mdw_medium, "airport_airspace_med"] = np.maximum(
 )
 
 mdw_decay = np.zeros(len(grid_m), dtype=float)
-mdw_decay[outside_mdw_shelf.to_numpy()] = radial_decay(
-    mdw_boundary_distance[outside_mdw_shelf.to_numpy()],
+mdw_decay_mask = outside_mdw_shelf.to_numpy() & (mdw_boundary_distance <= AIRSPACE_DECAY_MAX_DISTANCE_M)
+mdw_decay[mdw_decay_mask] = radial_decay(
+    mdw_boundary_distance[mdw_decay_mask],
     A=AIRSPACE_MED_PEAK,
     S_m=AIRSPACE_DECAY_S_M
 )
@@ -418,8 +421,9 @@ lewis_boundary_distance = centroid_series.distance(LEWIS_CLASS_D_M.boundary).to_
 grid_m.loc[in_lewis_class_d, "airport_airspace_high"] = AIRSPACE_HIGH_VAL
 
 lewis_decay = np.zeros(len(grid_m), dtype=float)
-lewis_decay[outside_lewis_class_d.to_numpy()] = radial_decay(
-    lewis_boundary_distance[outside_lewis_class_d.to_numpy()],
+lewis_decay_mask = outside_lewis_class_d.to_numpy() & (lewis_boundary_distance <= AIRSPACE_DECAY_MAX_DISTANCE_M)
+lewis_decay[lewis_decay_mask] = radial_decay(
+    lewis_boundary_distance[lewis_decay_mask],
     A=AIRSPACE_MED_PEAK,
     S_m=AIRSPACE_DECAY_S_M
 )
@@ -453,7 +457,9 @@ for name, lat, lon, heading, A, L, W in AIRPORT_SITES:
 
     # Outside the medium shelf, decay away from the outer boundary.
     outside_outer = d > r_outer_m
-    med_val[outside_outer] = radial_decay(d[outside_outer] - r_outer_m, A=AIRSPACE_MED_PEAK, S_m=AIRSPACE_DECAY_S_M)
+    decay_distance = d - r_outer_m
+    decay_mask = outside_outer & (decay_distance <= AIRSPACE_DECAY_MAX_DISTANCE_M)
+    med_val[decay_mask] = radial_decay(decay_distance[decay_mask], A=AIRSPACE_MED_PEAK, S_m=AIRSPACE_DECAY_S_M)
 
     grid_m["airport_airspace_med"] = np.maximum(
         grid_m["airport_airspace_med"].to_numpy(),

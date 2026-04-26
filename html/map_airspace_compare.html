@@ -294,6 +294,7 @@
       low: "#2ca25f",
       mediumCombined: "#f4b183",
       highCombined: "#c84c5a",
+      decayAir: "#f8ead2",
       mediumAir: "#f1c40f",
       highAir: "#b30000",
       mediumPop: "#6baed6",
@@ -472,8 +473,10 @@
     function colorAirspace(feature) {
       const p = feature.properties || {};
       if (p.density_type === "no-fly" || p.risk_class === "No-Fly") return colors.noFly;
+      const airspaceRisk = Number(p.airport_airspace_risk ?? p.airport_risk_combined ?? p.airport_risk) || 0;
       if (p.air_class === "High") return colors.highAir;
       if (p.air_class === "Medium") return colors.mediumAir;
+      if (airspaceRisk > 0) return colors.decayAir;
       return colors.low;
     }
 
@@ -566,6 +569,7 @@
       if (mode === "air") {
         return [
           ["Low airspace risk", colors.low],
+          ["Airspace decay zone", colors.decayAir],
           ["Medium airspace risk", colors.mediumAir],
           ["High airspace risk", colors.highAir]
         ];

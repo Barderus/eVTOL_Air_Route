@@ -17,7 +17,7 @@ OPENSKY_OUTPUT = ROOT / "opensky" / "output"
 GEOJSON_OUTPUT = ROOT / "geojson"
 HTML_OUTPUT = ROOT / "html"
 
-DISTANCE_WEIGHT = 0.8
+DISTANCE_WEIGHT = 0.6
 POPULATION_WEIGHT = 0.9
 AIRSPACE_WEIGHT = 1.4
 TRAFFIC_WEIGHT = 1.0
@@ -497,11 +497,44 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 """
 
 
-def normalize(values: np.ndarray) -> tuple[np.ndarray, float]:
-    maximum = float(np.max(values))
-    if maximum <= 0:
-        return np.zeros_like(values, dtype=float), 1.0
-    return values / maximum, maximum
+def normalize(
+    values: np.ndarray,
+    *,
+    clip_percentile: float | None = None,
+    transform: str | None = None,
+    power: float = 1.0,
+) -> tuple[np.ndarray, float]:
+    array = np.asarray(values, dtype=float)
+    array = np.clip(array, 0.0, None)
+
+    if transform == "log1p":
+        array = np.log1p(array)
+    elif transform is not None:
+        raise ValueError(f"Unsupported transform: {transform}")
+
+    if clip_percentile is None:
+        maximum = float(np.max(array))
+        if maximum <= 0:
+            return np.zeros_like(array, dtype=float), 1.0
+        normalized = array / maximum
+        if power != 1.0:
+            normalized = np.power(normalized, power)
+        return normalized, maximum
+
+    positive = array[array > 0]
+    if positive.size == 0:
+        return np.zeros_like(array, dtype=float), 1.0
+
+    scale = float(np.percentile(positive, clip_percentile))
+    if scale <= 0:
+        scale = float(np.max(positive))
+    if scale <= 0:
+        return np.zeros_like(array, dtype=float), 1.0
+
+    normalized = np.clip(array / scale, 0.0, 1.0)
+    if power != 1.0:
+        normalized = np.power(normalized, power)
+    return normalized, scale
 
 
 def path_cost(graph: nx.Graph, path: list[int], weight: str) -> float:
@@ -677,7 +710,7 @@ def build_route_features() -> dict[str, gpd.GeoDataFrame]:
     city_risk = grid["city_risk"].to_numpy(dtype=float)
     airspace_risk = grid["airport_risk_combined"].to_numpy(dtype=float)
     city_risk_norm, _ = normalize(city_risk)
-    airspace_risk_norm, _ = normalize(airspace_risk)
+    airspace_risk_norm, airspace_scale = normalize(airspace_risk, clip_percentile=99.0, power=0.75)
 
     start_node = node_for_point(START["lat"], START["lon"], sindex, geoms, centroids_m)
     destination_nodes = {
@@ -695,7 +728,12 @@ def build_route_features() -> dict[str, gpd.GeoDataFrame]:
             raise SystemExit(f"Traffic CSV not found: {dataset['csv_path']}")
 
         traffic_counts = load_traffic_counts(dataset["csv_path"], grid)
-        traffic_risk_norm, traffic_max = normalize(traffic_counts)
+        traffic_risk_norm, traffic_scale = normalize(
+            traffic_counts,
+            clip_percentile=95.0,
+            transform="log1p",
+            power=0.75,
+        )
         max_edge_distance = assign_route_edge_weights(
             graph,
             cent_x,
@@ -725,7 +763,7 @@ def build_route_features() -> dict[str, gpd.GeoDataFrame]:
                         "population_weight": spec["population_weight"],
                         "airspace_weight": spec["airspace_weight"],
                         "traffic_weight": spec["traffic_weight"],
-                        "traffic_samples_max": float(traffic_max),
+                    "traffic_scale": float(traffic_scale),
                         "algorithm": "astar",
                         "color": spec["color"],
                     }
@@ -736,7 +774,7 @@ def build_route_features() -> dict[str, gpd.GeoDataFrame]:
                     f"{destination['slug']} | {dataset['slug']} | {spec['name']}:",
                     f"nodes={len(path)}",
                     f"cost={total_cost:.4f}",
-                    f"traffic_max={traffic_max:.0f}",
+                    f"traffic_scale={traffic_scale:.4f}",
                 )
 
     return {
