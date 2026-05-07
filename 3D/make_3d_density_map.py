@@ -12,6 +12,7 @@ OHARE_LON = -87.90902412382081
 MIDWAY_LAT = 41.7856116663475
 MIDWAY_LON = -87.75331135429448
 TIME_WINDOWS = [1, 3, 6, 9, 12, 24]
+MIN_DENSITY_COUNT = 2
 METERS_TO_FEET = 3.28084
 GROUND_ELEVATION_FT_MSL = 680.0
 DEFAULT_MAX_ALTITUDE_AGL_FT = 4000
@@ -528,6 +529,7 @@ def build_density_rows(data: pd.DataFrame, lat_step: float, lon_step: float, alt
             .agg(count=("time", "size"))
             .sort_values("count", ascending=False)
         )
+        grouped = grouped[grouped["count"] >= MIN_DENSITY_COUNT]
         # Reuse the 2D occupancy of each horizontal bin as the displayed "cost"
         # so stacked altitude layers stay visually comparable.
         horizontal_costs = (
@@ -666,7 +668,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "csv_path",
         nargs="?",
-        default=folder.parent / "opensky" / "output" / "ohare_2019-03-09_local_15s_15nm_bbox.csv",
+        default=folder.parent / "opensky" / "output" / "ohare_2026-03-09_1s_15nm_bbox.csv",
         type=Path,
         help="CSV file to read.",
     )

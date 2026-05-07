@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Clow To Union Station Combined Routes</title>
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.6.0/dist/leaflet.css"
+    integrity="sha512-xwE/Az9zrjBIphAcBb3F6JVqxf46+CDLwfLMHloNu6KEQCAWi6HcDUbeOfBIptF7tcCzusKFjFw2yuvEpDL9wQ=="
+    crossorigin=""
+  />
+  <style>
+    :root {
+      --surface: #ffffff;
+      --surface-soft: #f5f7f8;
+      --line: #cfd7dd;
+      --text: #172026;
+      --muted: #5f6f7a;
+    }
+
+    * { box-sizing: border-box; }
+
+    html,
+    body {
+      height: 100%;
+      margin: 0;
+      color: var(--text);
+      font-family: Arial, Helvetica, sans-serif;
+      overflow: hidden;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      background: var(--surface-soft);
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--line);
+      background: var(--surface);
+      z-index: 1000;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 17px;
+      font-weight: 700;
+      line-height: 1.2;
+    }
+
+    .status {
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.25;
+      white-space: nowrap;
+    }
+
+    .control-strip {
+      display: inline-grid;
+      grid-template-columns: repeat(6, minmax(90px, 1fr));
+      min-height: 38px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      overflow: hidden;
+      background: var(--surface);
+    }
+
+    .control-strip button {
+      min-width: 0;
+      padding: 8px 10px;
+      border: 0;
+      border-right: 1px solid var(--line);
+      color: var(--text);
+      background: transparent;
+      font: inherit;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .control-strip button:last-child {
+      border-right: 0;
+    }
+
+    .control-strip button:hover {
+      background: #eef3f5;
+    }
+
+    .control-strip button.active {
+      color: #ffffff;
+      background: #165a72;
+    }
+
+    #map {
+      flex: 1 1 auto;
+      width: 100%;
+      height: calc(100vh - 59px);
+      min-height: 360px;
+    }
+
+    .legend-box {
+      background: rgba(255, 255, 255, 0.96);
+      padding: 10px 12px;
+      border-radius: 7px;
+      box-shadow: 0 6px 18px rgba(23, 32, 38, 0.14);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
+    .legend-title {
+      margin-bottom: 6px;
+      font-weight: 700;
+    }
+
+    .legend-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 4px 0;
+    }
+
+    .swatch-line {
+      width: 34px;
+      height: 0;
+      border-top: 4px solid #000;
+      display: inline-block;
+      flex: 0 0 auto;
+    }
+
+    @media (max-width: 720px) {
+      .toolbar {
+        align-items: stretch;
+        flex-direction: column;
+        gap: 9px;
+      }
+
+      .status {
+        white-space: normal;
+      }
+
+      #map {
+        height: calc(100vh - 88px);
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="toolbar">
+    <div>
+      <h1>Clow To Union Station Combined Routes</h1>
+      <div id="status" class="status">Loading 6 combined-cost routes...</div>
+    </div>
+    <div id="routeToggle" class="control-strip" role="group" aria-label="Dataset routes"></div>
+  </header>
+  <main id="map" aria-label="Clow to Union Station combined route map"></main>
+
+  <script
+    src="https://unpkg.com/leaflet@1.6.0/dist/leaflet.js"
+    integrity="sha512-gZwIG9x3wUXg2hdXF6+rVkLF/0Vi9U8D2Ntg4Ga5I5BZpVkVxlJWbSQtXPSiUTtC0TjtGOmxa1AJPuV0CPthew=="
+    crossorigin=""
+  ></script>
+  <script>
+    const ROUTE_URL = "../geojson/clow_to_union_station_astar_routes.geojson";
+    const startPoint = {
+      label: "Clow International Airport",
+      lat: 41.695923717435235,
+      lon: -88.12876224517822
+    };
+    const destinationPoint = {
+      label: "Union Station",
+      lat: 41.87838051825937,
+      lon: -87.63905525207521
+    };
+    const palette = [
+      "#c84c5a",
+      "#8b5cf6",
+      "#0f766e",
+      "#f59e0b",
+      "#2563eb",
+      "#16a34a"
+    ];
+    const routeLayers = new Map();
+    const activeDatasetSlugs = new Set();
+
+    const map = L.map("map", {
+      center: [41.84, -87.93],
+      zoom: 10
+    });
+
+    const statusEl = document.getElementById("status");
+    const routeToggleEl = document.getElementById("routeToggle");
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: "&copy; OpenStreetMap contributors"
+    }).addTo(map);
+
+    L.marker([startPoint.lat, startPoint.lon])
+      .bindPopup(`<b>Start</b><br>${startPoint.label}`)
+      .addTo(map);
+
+    L.marker([destinationPoint.lat, destinationPoint.lon])
+      .bindPopup(`<b>Destination</b><br>${destinationPoint.label}`)
+      .addTo(map);
+
+    const legend = L.control({ position: "bottomright" });
+    legend.onAdd = function() {
+      const div = L.DomUtil.create("div", "legend-box");
+      div.id = "legend";
+      div.innerHTML = `<div class="legend-title">Combined Routes</div><div>Loading...</div>`;
+      return div;
+    };
+    legend.addTo(map);
+
+    function formatDatasetLabel(label) {
+      if (/^(Sun|Mon|Tue|Wed|Thu|Fri|Sat)\s/.test(label)) {
+        return label;
+      }
+
+      const parsedDate = new Date(`${label}T00:00:00`);
+      if (Number.isNaN(parsedDate.getTime())) {
+        return label;
+      }
+
+      return parsedDate.toLocaleDateString("en-US", {
+        weekday: "short",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit"
+      }).replace(/,\s*/, " ");
+    }
+
+    function updateLegend(features) {
+      const legendEl = document.getElementById("legend");
+      if (!legendEl) return;
+
+      const visibleFeatures = features.filter((feature) => activeDatasetSlugs.has(feature.properties?.dataset_slug));
+      const rows = visibleFeatures.map((feature) => {
+        const p = feature.properties || {};
+        return (
+          `<div class="legend-row">` +
+          `<span class="swatch-line" style="border-top-color:${p.display_color}"></span>` +
+          `<span>${formatDatasetLabel(p.dataset_label)}</span>` +
+          `</div>`
+        );
+      }).join("");
+
+      legendEl.innerHTML = `<div class="legend-title">Combined Routes</div>${rows || "<div>No active routes</div>"}`;
+    }
+
+    function updateVisibleRoutes(features) {
+      features.forEach((feature) => {
+        const slug = feature.properties?.dataset_slug;
+        const layer = routeLayers.get(slug);
+        if (!layer) return;
+
+        if (activeDatasetSlugs.has(slug)) {
+          if (!map.hasLayer(layer)) layer.addTo(map);
+        } else if (map.hasLayer(layer)) {
+          map.removeLayer(layer);
+        }
+      });
+
+      updateLegend(features);
+      statusEl.textContent = `${activeDatasetSlugs.size} of ${features.length} combined-cost routes visible for Union Station.`;
+    }
+
+    function renderRouteToggles(features) {
+      routeToggleEl.innerHTML = "";
+      features.forEach((feature) => {
+        const p = feature.properties || {};
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = formatDatasetLabel(p.dataset_label).replace(/^(Sun|Mon|Tue|Wed|Thu|Fri|Sat)\s/, "");
+        button.classList.add("active");
+        button.addEventListener("click", () => {
+          if (activeDatasetSlugs.has(p.dataset_slug)) {
+            activeDatasetSlugs.delete(p.dataset_slug);
+            button.classList.remove("active");
+          } else {
+            activeDatasetSlugs.add(p.dataset_slug);
+            button.classList.add("active");
+          }
+          updateVisibleRoutes(features);
+        });
+        routeToggleEl.appendChild(button);
+      });
+    }
+
+    fetch(ROUTE_URL)
+      .then((response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json();
+      })
+      .then((data) => {
+        const features = (data.features || [])
+          .filter((feature) => feature.properties?.route_name === "combined")
+          .sort((a, b) => String(a.properties?.dataset_slug).localeCompare(String(b.properties?.dataset_slug)));
+
+        if (!features.length) {
+          throw new Error("No combined routes found for Union Station.");
+        }
+
+        const bounds = [];
+        features.forEach((feature, index) => {
+          const color = palette[index % palette.length];
+          feature.properties.display_color = color;
+          activeDatasetSlugs.add(feature.properties.dataset_slug);
+
+          const layer = L.geoJSON(feature, {
+            style: {
+              color,
+              weight: 5,
+              opacity: 0.9
+            },
+            onEachFeature: (routeFeature, routeLayer) => {
+              const p = routeFeature.properties || {};
+              routeLayer.bindPopup(
+                `<b>${p.destination_label}</b><br>` +
+                `<b>Dataset:</b> ${formatDatasetLabel(p.dataset_label)}<br>` +
+                `<b>Route:</b> ${p.route_label}<br>` +
+                `<b>Path nodes:</b> ${p.path_nodes}<br>` +
+                `<b>Total cost:</b> ${Number(p.total_cost).toFixed(4)}<br>` +
+                `<b>Weights:</b> D=${p.distance_weight}, P=${p.population_weight}, A=${p.airspace_weight}, T=${p.traffic_weight}`
+              );
+            }
+          });
+
+          routeLayers.set(feature.properties.dataset_slug, layer);
+          layer.addTo(map);
+
+          if (layer.getBounds().isValid()) {
+            bounds.push(layer.getBounds());
+          }
+        });
+
+        if (bounds.length) {
+          const combinedBounds = bounds.reduce((acc, item) => acc.extend(item), bounds[0]);
+          map.fitBounds(combinedBounds.pad(0.04), { animate: false });
+        }
+
+        renderRouteToggles(features);
+        updateVisibleRoutes(features);
+      })
+      .catch((error) => {
+        statusEl.textContent = "Route data failed to load.";
+        console.error(error);
+      });
+  </script>
+</body>
+</html>

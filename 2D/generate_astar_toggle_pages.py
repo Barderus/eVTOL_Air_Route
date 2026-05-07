@@ -191,6 +191,14 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       line-height: 1.2;
     }}
 
+    .status {{
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.25;
+      white-space: nowrap;
+    }}
+
     .control-strip {{
       display: flex;
       align-items: center;
@@ -260,6 +268,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
     @media (max-width: 920px) {{
       .toolbar {{ align-items: stretch; flex-direction: column; gap: 9px; }}
+      .status {{ white-space: normal; }}
       .control-strip {{ justify-content: stretch; }}
       .segmented {{ width: 100%; }}
       .route-toggle {{ grid-template-columns: repeat(5, minmax(0, 1fr)); }}
@@ -273,6 +282,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   <header class="toolbar">
     <div class="title-block">
       <h1>{page_title}</h1>
+      <div id="status" class="status">Select a route mode and traffic date.</div>
     </div>
     <div class="control-strip">
       <div class="segmented route-toggle" id="routeToggle" role="group" aria-label="Route mode"></div>
@@ -310,15 +320,22 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     startMarker.addTo(map);
     destinationMarker.addTo(map);
 
-    const allBounds = L.latLngBounds([startPoint.lat, startPoint.lon], [destinationPoint.lat, destinationPoint.lon]);
-    const routeDefinitions = {route_definitions};
+    const defaultRouteDefinitions = {route_definitions};
+    const availableRouteNames = new Set(
+      routeData.features.map((feature) => feature.properties?.route_name).filter(Boolean)
+    );
+    const routeDefinitions = defaultRouteDefinitions
+      .filter((routeDefinition) => availableRouteNames.has(routeDefinition.name))
+      .map((routeDefinition) => ({{ ...routeDefinition }}));
     const activeRouteLayers = {{}};
     // Index features by dataset slug and route name so a date switch only swaps
     // the visible route geometry, not the whole map.
     const datasetLayers = new Map();
     const dateToggle = document.getElementById("dateToggle");
     const routeToggle = document.getElementById("routeToggle");
-    const activeRouteNames = new Set(["combined"]);
+    const statusEl = document.getElementById("status");
+    let activeDatasetSlug = datasetOrder[0]?.slug || null;
+    let activeRouteNames = new Set(["combined"]);
 
     function formatDatasetLabel(dateLabel) {{
       if (/^(Sun|Mon|Tue|Wed|Thu|Fri|Sat)\\s/.test(dateLabel)) {{
@@ -344,6 +361,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         datasetLayers.set(properties.dataset_slug, {{}});
       }}
       datasetLayers.get(properties.dataset_slug)[properties.route_name] = feature;
+
+      const routeDefinition = routeDefinitions.find((item) => item.name === properties.route_name);
+      if (routeDefinition) {{
+        routeDefinition.label = properties.route_label || routeDefinition.label;
+        routeDefinition.color = properties.color || routeDefinition.color;
+      }}
     }});
 
     routeDefinitions.forEach((routeDefinition) => {{
@@ -379,23 +402,24 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     }}
 
     function showDataset(datasetSlug) {{
+      activeDatasetSlug = datasetSlug;
       const routeLayerMap = datasetLayers.get(datasetSlug) || {{}};
       Object.entries(activeRouteLayers).forEach(([routeName, layer]) => {{
         const feature = routeLayerMap[routeName];
         layer.clearLayers();
         if (feature) {{
           layer.addData(feature);
-          allBounds.extend(layer.getBounds());
         }}
       }});
 
       setActiveDateButton(datasetSlug);
-      renderActiveRoutes();
+      syncVisibleRoutes();
     }}
 
-    function renderActiveRoutes() {{
+    function syncVisibleRoutes() {{
+      const routeLayerMap = datasetLayers.get(activeDatasetSlug) || {{}};
       Object.entries(activeRouteLayers).forEach(([name, layer]) => {{
-        if (activeRouteNames.has(name) && layer.getLayers().length > 0) {{
+        if (activeRouteNames.has(name) && routeLayerMap[name] && layer.getLayers().length > 0) {{
           layer.addTo(map);
         }} else {{
           map.removeLayer(layer);
@@ -407,6 +431,16 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         button.classList.toggle("active", isActive);
         button.setAttribute("aria-pressed", isActive ? "true" : "false");
       }});
+
+      const activeDate = dateToggle.querySelector("button.active");
+      const activeLabels = routeDefinitions
+        .filter((item) => activeRouteNames.has(item.name) && routeLayerMap[item.name])
+        .map((item) => item.label);
+      if (statusEl && activeDate) {{
+        statusEl.textContent = activeLabels.length
+          ? activeLabels.join(", ") + " routes, " + activeDate.textContent + " traffic dataset"
+          : "No route data available for " + activeDate.textContent + " traffic dataset";
+      }}
     }}
 
     function toggleRoute(routeName) {{
@@ -418,8 +452,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       }} else {{
         activeRouteNames.add(routeName);
       }}
-
-      renderActiveRoutes();
+      syncVisibleRoutes();
     }}
 
     routeDefinitions.forEach((routeDefinition) => {{
@@ -427,7 +460,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       button.type = "button";
       button.dataset.route = routeDefinition.name;
       button.textContent = routeDefinition.label;
-      button.setAttribute("aria-pressed", routeDefinition.name === "combined" ? "true" : "false");
+      button.setAttribute("aria-pressed", activeRouteNames.has(routeDefinition.name) ? "true" : "false");
       button.addEventListener("click", () => toggleRoute(routeDefinition.name));
       routeToggle.appendChild(button);
     }});
@@ -459,7 +492,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     }};
     legend.addTo(map);
 
-    map.fitBounds(STUDY_BOUNDS, {{ padding: [20, 20] }});
     showDataset(datasetOrder[0].slug);
   </script>
 </body>
@@ -467,11 +499,44 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 """
 
 
-def normalize(values: np.ndarray) -> tuple[np.ndarray, float]:
-    maximum = float(np.max(values))
-    if maximum <= 0:
-        return np.zeros_like(values, dtype=float), 1.0
-    return values / maximum, maximum
+def normalize(
+    values: np.ndarray,
+    *,
+    clip_percentile: float | None = None,
+    transform: str | None = None,
+    power: float = 1.0,
+) -> tuple[np.ndarray, float]:
+    array = np.asarray(values, dtype=float)
+    array = np.clip(array, 0.0, None)
+
+    if transform == "log1p":
+        array = np.log1p(array)
+    elif transform is not None:
+        raise ValueError(f"Unsupported transform: {transform}")
+
+    if clip_percentile is None:
+        maximum = float(np.max(array))
+        if maximum <= 0:
+            return np.zeros_like(array, dtype=float), 1.0
+        normalized = array / maximum
+        if power != 1.0:
+            normalized = np.power(normalized, power)
+        return normalized, maximum
+
+    positive = array[array > 0]
+    if positive.size == 0:
+        return np.zeros_like(array, dtype=float), 1.0
+
+    scale = float(np.percentile(positive, clip_percentile))
+    if scale <= 0:
+        scale = float(np.max(positive))
+    if scale <= 0:
+        return np.zeros_like(array, dtype=float), 1.0
+
+    normalized = np.clip(array / scale, 0.0, 1.0)
+    if power != 1.0:
+        normalized = np.power(normalized, power)
+    return normalized, scale
 
 
 def path_cost(graph: nx.Graph, path: list[int], weight: str) -> float:
@@ -647,7 +712,7 @@ def build_route_features() -> dict[str, gpd.GeoDataFrame]:
     city_risk = grid["city_risk"].to_numpy(dtype=float)
     airspace_risk = grid["airport_risk_combined"].to_numpy(dtype=float)
     city_risk_norm, _ = normalize(city_risk)
-    airspace_risk_norm, _ = normalize(airspace_risk)
+    airspace_risk_norm, airspace_scale = normalize(airspace_risk, clip_percentile=99.0, power=0.75)
 
     start_node = node_for_point(START["lat"], START["lon"], sindex, geoms, centroids_m)
     destination_nodes = {
@@ -665,7 +730,12 @@ def build_route_features() -> dict[str, gpd.GeoDataFrame]:
             raise SystemExit(f"Traffic CSV not found: {dataset['csv_path']}")
 
         traffic_counts = load_traffic_counts(dataset["csv_path"], grid)
-        traffic_risk_norm, traffic_max = normalize(traffic_counts)
+        traffic_risk_norm, traffic_scale = normalize(
+            traffic_counts,
+            clip_percentile=95.0,
+            transform="log1p",
+            power=0.75,
+        )
         max_edge_distance = assign_route_edge_weights(
             graph,
             cent_x,
@@ -695,7 +765,8 @@ def build_route_features() -> dict[str, gpd.GeoDataFrame]:
                         "population_weight": spec["population_weight"],
                         "airspace_weight": spec["airspace_weight"],
                         "traffic_weight": spec["traffic_weight"],
-                        "traffic_samples_max": float(traffic_max),
+                        "traffic_scale": float(traffic_scale),
+                        "airspace_scale": float(airspace_scale),
                         "algorithm": "astar",
                         "color": spec["color"],
                     }
@@ -706,7 +777,7 @@ def build_route_features() -> dict[str, gpd.GeoDataFrame]:
                     f"{destination['slug']} | {dataset['slug']} | {spec['name']}:",
                     f"nodes={len(path)}",
                     f"cost={total_cost:.4f}",
-                    f"traffic_max={traffic_max:.0f}",
+                    f"traffic_scale={traffic_scale:.4f}",
                 )
 
     return {

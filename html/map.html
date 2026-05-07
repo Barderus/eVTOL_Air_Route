@@ -173,6 +173,19 @@
       text-align: right;
     }
 
+    .ring-label {
+      padding: 3px 7px;
+      border: 1px solid rgba(23, 32, 38, 0.16);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.92);
+      box-shadow: 0 4px 10px rgba(23, 32, 38, 0.12);
+      color: var(--text);
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1;
+      white-space: nowrap;
+    }
+
     @media (max-width: 720px) {
       .toolbar {
         align-items: stretch;
@@ -234,7 +247,10 @@
     const AIR_MED_TH = 30;
     const AIR_HIGH_TH = 70;
     const LAB_NO_FLY_RADIUS_M = 3000;
+    const CELL_SIZE_M = 500;
     const METERS_PER_DEG_LAT = 111320;
+    const NM_TO_METERS = 1852;
+    const GRID_RADIUS_OFFSET_M = CELL_SIZE_M / 2;
 
     const labNoFlySites = [
       { name: "Argonne National Lab", lat: 41.7150, lon: -87.9830 },
@@ -248,6 +264,37 @@
       { name: "Brookeridge Airpark", lat: 41.73268507397754, lon: -87.9972105460431 }
     ];
 
+    const airportRingSpecs = [
+      {
+        airportName: "O'Hare International Airport",
+        label: "ORD 5 NM",
+        radiusNm: 5,
+        color: "#8b5cf6",
+        dashArray: "8 6"
+      },
+      {
+        airportName: "O'Hare International Airport",
+        label: "ORD 10 NM",
+        radiusNm: 10,
+        color: "#7c3aed",
+        dashArray: "14 7"
+      },
+      {
+        airportName: "Midway International Airport",
+        label: "MDW 5 NM",
+        radiusNm: 5,
+        color: "#0f766e",
+        dashArray: "8 6"
+      },
+      {
+        airportName: "Midway International Airport",
+        label: "MDW 10 NM",
+        radiusNm: 10,
+        color: "#0ea5a5",
+        dashArray: "14 7"
+      }
+    ];
+
     const routeEndpoints = {
       start: { label: "Clow International Airport", lat: 41.695923717435235, lon: -88.12876224517822 },
       end: { label: "Chicago Loop", lat: 41.87838051825937, lon: -87.63905525207521 }
@@ -255,6 +302,8 @@
 
     const colors = {
       low: "#2ca25f",
+      mediumCombined: "#f4b183",
+      highCombined: "#c84c5a",
       mediumAir: "#f1c40f",
       highAir: "#b30000",
       mediumPop: "#6baed6",
@@ -319,11 +368,53 @@
       ))
     ).addTo(map);
 
+    function ringLabelLatLng(lat, lon, radiusMeters) {
+      return [lat + (radiusMeters / METERS_PER_DEG_LAT), lon];
+    }
+
+    const airportRingLayer = L.layerGroup(
+      airportRingSpecs.flatMap((spec) => {
+        const airport = airports.find((item) => item.name === spec.airportName);
+        if (!airport) return [];
+
+        // The risk grid is classified from 500 m cell centroids. Expanding the
+        // display radius by half a cell makes the overlay track the outer edge
+        // of the included cells instead of the idealized centroid threshold.
+        const radiusMeters = (spec.radiusNm * NM_TO_METERS) + GRID_RADIUS_OFFSET_M;
+        const circle = L.circle([airport.lat, airport.lon], {
+          radius: radiusMeters,
+          color: spec.color,
+          weight: 2.2,
+          opacity: 0.95,
+          dashArray: spec.dashArray,
+          fill: false,
+          interactive: true
+        }).bindPopup(
+          `<b>${airport.name}</b><br>` +
+          `${spec.label} protected ring<br>` +
+          `Base radius: ${spec.radiusNm} NM<br>` +
+          `Grid-adjusted display radius: ${(radiusMeters / NM_TO_METERS).toFixed(2)} NM`
+        );
+
+        const label = L.marker(ringLabelLatLng(airport.lat, airport.lon, radiusMeters), {
+          interactive: false,
+          icon: L.divIcon({
+            className: "",
+            html: `<span class="ring-label">${spec.label}</span>`,
+            iconSize: null
+          })
+        });
+
+        return [circle, label];
+      })
+    ).addTo(map);
+
     L.control.layers(
       null,
       {
         "Reference route": referenceLayer,
-        "Airports": airportLayer
+        "Airports": airportLayer,
+        "Airport rings": airportRingLayer
       },
       { collapsed: false, position: "topright" }
     ).addTo(map);
@@ -452,17 +543,8 @@
     function colorCombined(feature) {
       const p = feature.properties || {};
       if (p.density_type === "no-fly" || p.risk_class === "No-Fly") return colors.noFly;
-
-      if (p.density_type === "population") {
-        if (p.pop_class === "High") return colors.highPop;
-        if (p.pop_class === "Medium") return colors.mediumPop;
-      }
-
-      if (p.density_type === "airspace") {
-        if (p.air_class === "High") return colors.highAir;
-        if (p.air_class === "Medium") return colors.mediumAir;
-      }
-
+      if (p.risk_class === "High") return colors.highCombined;
+      if (p.risk_class === "Medium") return colors.mediumCombined;
       return colors.low;
     }
 
