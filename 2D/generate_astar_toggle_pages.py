@@ -12,12 +12,12 @@ from shapely.geometry import LineString, Point
 
 
 ROOT = Path(__file__).resolve().parent.parent
-GRID_PATH = ROOT / "geojson" / "risk_grid_v6.geojson"
+GRID_PATH = ROOT / "geojson" / "risk_grid_v7.geojson"
 OPENSKY_OUTPUT = ROOT / "opensky" / "output"
 GEOJSON_OUTPUT = ROOT / "geojson"
 HTML_OUTPUT = ROOT / "html"
 
-DISTANCE_WEIGHT = 0.8
+DISTANCE_WEIGHT = 0.6
 POPULATION_WEIGHT = 0.9
 AIRSPACE_WEIGHT = 1.4
 TRAFFIC_WEIGHT = 1.0

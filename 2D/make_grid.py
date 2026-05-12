@@ -15,6 +15,8 @@ CRS_M  = "EPSG:3857"
 # Conversion constants
 NM_TO_M = 1852.0
 MI_TO_M = 1609.344
+AIRSPACE_MODEL_MAX_HEIGHT_AGL_FT = 3000.0
+AIRSPACE_MODEL_MAX_HEIGHT_MSL_FT = 4000.0
 
 # Study bounds anchored to Aurora, Frankfort, and Lake Zurich.
 # West bound from 41°45′50″N 88°17′24″W
@@ -157,6 +159,10 @@ def build_ord_class_b_shelves():
     area_a_i290_north = (42.0222222222, -88.0308333333)
     area_a_us12 = (42.0841666667, -87.9405555556)
 
+    # O'Hare low-altitude airspace model:
+    # - high-cost core follows a 5 NM ring with a 6 NM arc extension
+    # - medium-cost outer shelf extends to 10 NM, with legal transitions around
+    #   the Midway overlap area represented by the coded 10.5 NM connectors
     area_a_points = [
         area_a_start,
         *circle_arc(ord_poo, poo5, area_a_start, area_a_east_arc, "cw", 28)[1:],
@@ -213,6 +219,10 @@ def build_midway_class_c_shelves():
 
     lake_east = east_line_circle_intersection(shoreline_north, mdw, mdw10)
 
+    # Midway low-altitude airspace model:
+    # - 5 NM core
+    # - 10 NM outer shelf
+    # - the shelf excludes overlapping O'Hare Class B footprint where needed
     land_shelf_points = [
         land_start,
         shoreline_north,
@@ -299,7 +309,10 @@ if BG_GEOJSON_PATH.exists():
     grid_m["density_p_km2"] = join["density_p_km2"].astype(float).fillna(0.0)
     grid_m["density_risk"] = join["density_risk"].fillna("low")
 else:
-    prior_grid = gpd.read_file(REPO_ROOT / "geojson" / "risk_grid_v6.geojson").to_crs(CRS_M)
+    prior_grid_path = REPO_ROOT / "geojson" / "risk_grid_v7.geojson"
+    if not prior_grid_path.exists():
+        prior_grid_path = REPO_ROOT / "geojson" / "risk_grid_v6.geojson"
+    prior_grid = gpd.read_file(prior_grid_path).to_crs(CRS_M)
     prior_join = gpd.sjoin(
         centroids,
         prior_grid[["density_p_km2", "density_risk", "city_risk", "pop_class", "geometry"]],
@@ -350,15 +363,18 @@ AIR_HIGH_TH = 70
 grid_m.loc[grid_m["city_risk"] > POP_MED_TH, "pop_class"] = "Medium"
 grid_m.loc[grid_m["city_risk"] > POP_HIGH_TH, "pop_class"] = "High"
 
-# Add airport airspace structure on top of the corridor risk:
-# ORD uses FAA-like Class B shelf polygons; Midway and Lewis keep radial
-# approximations but follow the same high / medium / outside-decay scoring.
+# Add airport airspace structure on top of the corridor risk.
+# The airspace model is documented as a low-altitude surface up to
+# 3000 ft AGL / 4000 ft MSL.
+# ORD uses FAA-like shelf polygons; Midway and Lewis follow the same
+# high / medium / outside-decay scoring with their coded footprints.
 def radial_decay(d_m, A, S_m):
     return A * np.exp(-d_m / S_m)
 
 AIRSPACE_HIGH_VAL = 1.0
 AIRSPACE_MED_PEAK = 0.6
 AIRSPACE_DECAY_S_M = 8000.0
+# Decay is only applied for 1500 m beyond the outer modeled shelf boundary.
 AIRSPACE_DECAY_MAX_DISTANCE_M = 3 * CELL_SIZE_M
 
 grid_m["airport_airspace_high"] = 0.0
@@ -366,8 +382,10 @@ grid_m["airport_airspace_med"]  = 0.0
 
 centroid_series = gpd.GeoSeries(grid_m["centroid"], crs=CRS_M)
 
-# ORD Class B: Area A is the high-cost core, Area B is the medium-cost shelf,
-# and cost decays outward from the Area B outer boundary.
+# ORD Class B low-altitude model:
+# - Area A is the high-cost 5 NM / 6 NM-arc core
+# - Area B is the medium-cost outer shelf out to 10 NM
+# - medium airspace cost then decays for 1500 m beyond Area B
 in_ord_area_a = centroid_series.within(ORD_CLASS_B_AREA_A_M) | centroid_series.touches(ORD_CLASS_B_AREA_A_M)
 in_ord_area_b = centroid_series.within(ORD_CLASS_B_AREA_B_M) | centroid_series.touches(ORD_CLASS_B_AREA_B_M)
 in_ord_medium = in_ord_area_b & ~in_ord_area_a
@@ -389,8 +407,10 @@ ord_decay[ord_decay_mask] = radial_decay(
 )
 grid_m["airport_airspace_med"] = np.maximum(grid_m["airport_airspace_med"].to_numpy(), ord_decay)
 
-# Midway Class C: 5 NM core is high cost, the shelf is medium cost, and cost
-# decays outward from the outer shelf boundary.
+# Midway low-altitude model:
+# - 5 NM core is high cost
+# - 10 NM shelf is medium cost
+# - medium airspace cost then decays for 1500 m beyond the shelf boundary
 in_mdw_core = centroid_series.within(MIDWAY_CLASS_C_CORE_M) | centroid_series.touches(MIDWAY_CLASS_C_CORE_M)
 in_mdw_shelf = centroid_series.within(MIDWAY_CLASS_C_SHELF_M) | centroid_series.touches(MIDWAY_CLASS_C_SHELF_M)
 in_mdw_medium = in_mdw_shelf & ~in_mdw_core
@@ -489,8 +509,15 @@ dominant_mask = (grid_m["pop_class"] != "Low") | (grid_m["air_class"] != "Low")
 grid_m.loc[dominant_mask & (grid_m["city_risk"] >= grid_m["airport_risk_combined"]), "density_type"] = "population"
 grid_m.loc[dominant_mask & (grid_m["airport_risk_combined"] > grid_m["city_risk"]), "density_type"] = "airspace"
 
-# Total risk cost
-grid_m["risk_cost"] = grid_m["airport_risk_combined"] + grid_m["city_risk"]
+# Total risk cost for the static map uses only the cell-based factors that
+# exist on the grid itself. Distance is a route-edge term, not a cell term, and
+# traffic is intentionally excluded from map.html for now.
+COMBINED_POPULATION_WEIGHT = 0.9
+COMBINED_AIRSPACE_WEIGHT = 1.4
+grid_m["risk_cost"] = (
+    COMBINED_POPULATION_WEIGHT * grid_m["city_risk"]
+    + COMBINED_AIRSPACE_WEIGHT * grid_m["airport_risk_combined"]
+)
 
 # NO-FLY OVERRIDE
 grid_m["risk_class"] = "Low"
@@ -512,7 +539,7 @@ grid_m.loc[grid_m["risk_cost"] > 70, "risk_class"] = "High"
 grid_m.loc[grid_m["risk_class"] == "No-Fly", "risk_cost"] = 9999
 
 # EXPORT
-OUTPUT_GEOJSON_PATH = REPO_ROOT / "geojson" / "risk_grid_v6.geojson"
+OUTPUT_GEOJSON_PATH = REPO_ROOT / "geojson" / "risk_grid_v7.geojson"
 grid_ll = grid_m.drop(columns=["centroid"]).to_crs(CRS_LL)
 grid_ll.to_file(OUTPUT_GEOJSON_PATH, driver="GeoJSON")
 print("Saved:", OUTPUT_GEOJSON_PATH)

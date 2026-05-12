@@ -10,7 +10,7 @@ import pandas as pd
 from shapely.geometry import LineString, Point
 
 
-GRID_PATH = Path(__file__).resolve().parent.parent / "geojson" / "risk_grid_v6.geojson"
+GRID_PATH = Path(__file__).resolve().parent.parent / "geojson" / "risk_grid_v7.geojson"
 OUTPUT_PATH = Path(__file__).resolve().parent.parent / "geojson" / "routes.geojson"
 TRAFFIC_CSV_PATH = (
     Path(__file__).resolve().parent.parent / "opensky" / "output" / "ohare_2019-03-09_local_1s_15nm_bbox.csv"

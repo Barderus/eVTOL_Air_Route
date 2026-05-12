@@ -237,7 +237,7 @@
   ></script>
 
   <script>
-    const GRID_URL = "../geojson/risk_grid_v6.geojson";
+    const GRID_URL = "../geojson/risk_grid_v7.geojson";
     const STUDY_BOUNDS = L.latLngBounds(
       [41.48, -88.34],
       [42.21, -87.52]
@@ -246,6 +246,10 @@
     const POP_HIGH_TH = 90;
     const AIR_MED_TH = 30;
     const AIR_HIGH_TH = 70;
+    const COMBINED_POPULATION_WEIGHT = 0.9;
+    const COMBINED_AIRSPACE_WEIGHT = 1.4;
+    const AIRSPACE_MODEL_MAX_HEIGHT_AGL_FT = 3000;
+    const AIRSPACE_MODEL_MAX_HEIGHT_MSL_FT = 4000;
     const LAB_NO_FLY_RADIUS_M = 3000;
     const CELL_SIZE_M = 500;
     const METERS_PER_DEG_LAT = 111320;
@@ -392,6 +396,7 @@
         }).bindPopup(
           `<b>${airport.name}</b><br>` +
           `${spec.label} protected ring<br>` +
+          `Modeled low-altitude airspace ceiling: ${AIRSPACE_MODEL_MAX_HEIGHT_AGL_FT} ft AGL / ${AIRSPACE_MODEL_MAX_HEIGHT_MSL_FT} ft MSL<br>` +
           `Base radius: ${spec.radiusNm} NM<br>` +
           `Grid-adjusted display radius: ${(radiusMeters / NM_TO_METERS).toFixed(2)} NM`
         );
@@ -492,6 +497,10 @@
       return "Low";
     }
 
+    function combinedRiskCost(cityRisk, airportRisk) {
+      return (COMBINED_POPULATION_WEIGHT * cityRisk) + (COMBINED_AIRSPACE_WEIGHT * airportRisk);
+    }
+
     function isLabNoFlyFeature(feature) {
       const p = feature.properties || {};
       const isNoFly = p.density_type === "no-fly" || p.risk_class === "No-Fly";
@@ -509,7 +518,7 @@
       const p = feature.properties || {};
       const cityRisk = Number(p.city_risk) || 0;
       const airportRisk = Number(p.airport_risk_combined ?? p.airport_risk) || 0;
-      const riskCost = cityRisk + airportRisk;
+      const riskCost = combinedRiskCost(cityRisk, airportRisk);
       const popClass = classFromThreshold(cityRisk, POP_MED_TH, POP_HIGH_TH);
       const airClass = classFromThreshold(airportRisk, AIR_MED_TH, AIR_HIGH_TH);
 

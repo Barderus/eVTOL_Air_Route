@@ -1,112 +1,17 @@
 # eVTOL Air Route
 
-This project explores low-altitude routing around Chicago for eVTOL-style flights.
+This project studies low-altitude eVTOL routing in the Chicago region. It
+builds a risk-aware routing surface, compares alternate routes to major
+destinations, and visualizes how population exposure, airport airspace, and
+observed flight activity influence path selection.
 
-It combines five route views:
+The project combines GIS processing, graph search, and route post-processing.
+Its main methods include grid-based risk modeling, A* search, traffic-density
+aggregation from OpenSky observations, and optional smoothing experiments for
+reducing sharp turns in routed paths.
 
-- `combined`
-- `airspace_only`
-- `flight_density_only`
-- `population_only`
-- `distance_only`
-
-The idea is simple:
-
-- population cost comes from census block-group density
-- airspace cost comes from airport corridors and airport control radii
-- flight-density cost comes from observed OpenSky traffic
-- distance cost comes from Euclidean distance between neighboring grid cells
-
-## Main Folders
-
-- `2D/` builds the grid, routing graph, and 2D traffic maps
-- `3D/` builds the 3D traffic-density map
-- `opensky/` exports or stores OpenSky CSV data
-- `geojson/` stores the grid and route outputs
-- `html/` stores the map pages
-- `Notes/` explains how the costs and routing work
-
-## Main Workflow
-
-### 1. Build the population layer
-
-```powershell
-python population\population_calculation.py
-```
-
-This creates:
-
-- `geojson\il_blockgroups_population_density.geojson`
-
-### 2. Build the risk grid
-
-```powershell
-python 2D\make_grid.py
-```
-
-This creates:
-
-- `geojson\risk_grid_v6.geojson`
-
-### 3. Generate the A* route pages
-
-```powershell
-uv run python 2D\generate_astar_toggle_pages.py
-```
-
-This creates GeoJSON and HTML outputs for:
-
-- Clow to Union Station
-- Clow to O'Hare
-- Clow to Midway
-
-The generated HTML pages are:
-
-- `html\clow_to_union_station_astar.html`
-- `html\clow_to_ohare_astar.html`
-- `html\clow_to_midway_astar.html`
-
-## Optional Traffic Visualizations
-
-### 2D density plot
-
-```powershell
-uv run python 2D\make_density_plot.py opensky\output\ohare_2019-03-09_1s_15nm_bbox.csv
-```
-
-### 2D Leaflet traffic map
-
-```powershell
-uv run python 2D\make_leaflet_map.py opensky\output\ohare_2019-03-09_1s_15nm_bbox.csv
-```
-
-### 3D traffic-density map
-
-```powershell
-uv run python 3D\generate_3d_density_map.py opensky\output\ohare_2019-03-09_1s_15nm_bbox.csv
-```
-
-## Viewing The HTML Files
-
-Run a local server from the repo root:
-
-```powershell
-python -m http.server 8080
-```
-
-Then open pages like:
-
-```text
-http://localhost:8080/html/clow_to_ohare_astar.html
-http://localhost:8080/html/ohare_density_leaflet.html
-http://localhost:8080/html/ohare_3d_density_map.html
-```
-
-## Notes
-
-- `2D\chicago_graph.py` expects `geojson\risk_grid_v6.geojson` to exist first.
-- `2D\make_grid.py` expects `geojson\il_blockgroups_population_density.geojson` to exist first.
-- The OpenSky exporter expects CSV columns consistent with `opensky\query.sql`.
-- `Notes\astar_cost_breakdown.md` explains how each routing cost is calculated.
-- `Notes\distance_cost_explained.md` explains why the distance route is not a single straight line.
-- The route pages are precomputed and embedded directly in the HTML for fast switching between dates and route types.
+The data used in the project comes from census-derived population density,
+airport and controlled-airspace assumptions encoded as geometric risk surfaces,
+and OpenSky state-vector traffic exports filtered to the Chicago study area.
+The result is a set of map-based artifacts for exploring how different cost
+factors change preferred low-altitude flight paths.
