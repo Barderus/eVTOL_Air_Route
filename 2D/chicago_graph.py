@@ -1,3 +1,11 @@
+"""Build a single set of A* routes across the Chicago study grid.
+
+This script is the smallest end-to-end routing entry point in the repository.
+It loads the active grid, derives a traffic-density layer from one OpenSky CSV,
+builds a graph from the grid cells, runs A* for a small set of route presets,
+and writes the resulting route geometries to GeoJSON.
+"""
+
 import argparse
 import math
 import time
@@ -75,6 +83,11 @@ def normalize(
     transform: str | None = None,
     power: float = 1.0,
 ) -> tuple[np.ndarray, float]:
+    """Scale a non-negative array into the 0-1 range.
+
+    Optional clipping and transforms are used to keep very large population,
+    airspace, or traffic values from dominating the route cost.
+    """
     array = np.asarray(values, dtype=float)
     array = np.clip(array, 0.0, None)
 
@@ -109,10 +122,12 @@ def normalize(
 
 
 def path_cost(graph: nx.Graph, path: list[int], weight: str) -> float:
+    """Return the summed edge cost for a path using one named weight field."""
     return sum(graph[path[i]][path[i + 1]][weight] for i in range(len(path) - 1))
 
 
 def detect_csv_encoding(csv_path: Path) -> str:
+    """Handle the common BOM variants seen in exported CSV files."""
     with csv_path.open("rb") as file_handle:
         first_bytes = file_handle.read(4)
 
@@ -124,6 +139,7 @@ def detect_csv_encoding(csv_path: Path) -> str:
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse CLI arguments for a one-off route build."""
     parser = argparse.ArgumentParser(
         description="Route across the Chicago grid using population risk, airport airspace cost, and 1-second observed air traffic density."
     )
@@ -149,6 +165,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def load_traffic_density(grid: gpd.GeoDataFrame, traffic_csv_path: Path) -> tuple[np.ndarray, np.ndarray, int, int]:
+    """Convert raw OpenSky point observations into per-cell traffic density."""
     grid_m = grid.to_crs("EPSG:3857")[["geometry"]].copy()
     grid_m["cell_id"] = grid_m.index
     cell_area_km2 = (grid_m.geometry.area.to_numpy(dtype=float) / 1_000_000.0).clip(min=1e-9)
@@ -202,6 +219,7 @@ def load_traffic_density(grid: gpd.GeoDataFrame, traffic_csv_path: Path) -> tupl
 
 
 def build_graph(grid: gpd.GeoDataFrame) -> tuple[nx.Graph, gpd.GeoSeries, np.ndarray, np.ndarray]:
+    """Turn the grid into a graph where touching cells are neighbors."""
     graph = nx.Graph()
     for i, row in grid.iterrows():
         graph.add_node(
@@ -241,6 +259,7 @@ def assign_edge_weights(
     airspace_risk_norm: np.ndarray,
     traffic_risk_norm: np.ndarray,
 ) -> float:
+    """Project node-based cost layers onto graph edges for every route mode."""
     neighbor_distances = []
     for u, v in graph.edges():
         dx = cent_x[u] - cent_x[v]
@@ -277,6 +296,7 @@ def node_for_point(
     geoms: gpd.GeoSeries,
     centroids_m: gpd.GeoSeries,
 ) -> int:
+    """Map a lat/lon point onto the containing grid cell or nearest centroid."""
     pt = Point(lon, lat)
     for i in sindex.intersection(pt.bounds):
         if geoms.iloc[i].contains(pt):
@@ -287,6 +307,7 @@ def node_for_point(
 
 
 def make_heuristic(distance_weight: float, cent_x: np.ndarray, cent_y: np.ndarray, max_edge_distance: float):
+    """Build the admissible A* heuristic for one route specification."""
     if distance_weight <= 0:
         return lambda _u, _v: 0.0
 
@@ -301,10 +322,12 @@ def make_heuristic(distance_weight: float, cent_x: np.ndarray, cent_y: np.ndarra
 
 
 def route_line(grid: gpd.GeoDataFrame, path: list[int]) -> LineString:
+    """Render a node path as a centroid-to-centroid line."""
     return LineString([grid.loc[n].geometry.centroid for n in path])
 
 
 def main() -> None:
+    """Run the full one-file routing pipeline and write GeoJSON output."""
     args = parse_args()
     grid = gpd.read_file(args.grid).reset_index(drop=True)
 

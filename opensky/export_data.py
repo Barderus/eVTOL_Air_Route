@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+"""Export Chicago-area OpenSky traffic data through Trino.
+
+This script materializes one CSV for a requested local date. The exported CSV
+is later consumed by the routing scripts to derive a traffic-density layer.
+"""
+
 import argparse
 import math
 import os
@@ -20,6 +26,7 @@ PINGREE_GROVE_LON = -88.413416
 
 
 def resolve_trino_path(trino_path: Path) -> Path:
+    """Resolve either a direct JAR path or a folder containing the Trino CLI."""
     # Accept either a direct JAR path or a containing folder so local setup can
     # stay flexible across machines.
     if trino_path.is_file():
@@ -58,6 +65,7 @@ def resolve_trino_path(trino_path: Path) -> Path:
 
 
 def get_day_window(date_text: str, timezone_name: str) -> tuple[int, int]:
+    """Return the local-day window as UTC epoch seconds."""
     # Interpret the requested date in local time first, then hand UTC epochs to
     # Trino so the SQL stays unambiguous.
     timezone = ZoneInfo(timezone_name)
@@ -67,6 +75,7 @@ def get_day_window(date_text: str, timezone_name: str) -> tuple[int, int]:
 
 
 def get_hour_window_utc(start_epoch: int, end_epoch: int) -> tuple[str, str]:
+    """Return the UTC hour buckets used for Trino partition pruning."""
     # Trino partition pruning works at the UTC hour level, so round the day
     # window outward to matching hour buckets.
     start_dt = datetime.fromtimestamp(start_epoch, tz=UTC).replace(minute=0, second=0, microsecond=0)
@@ -77,6 +86,7 @@ def get_hour_window_utc(start_epoch: int, end_epoch: int) -> tuple[str, str]:
 
 
 def get_bounding_box(center_lat: float, center_lon: float, radius_nm: float) -> tuple[float, float, float, float]:
+    """Approximate a latitude/longitude bounding box for the requested radius."""
     radius_km = radius_nm * NM_TO_KM
     lat_change = radius_km / 110.574
     lon_change = radius_km / (111.320 * math.cos(math.radians(center_lat)))
@@ -88,11 +98,13 @@ def get_bounding_box(center_lat: float, center_lon: float, radius_nm: float) -> 
 
 
 def build_query(template_path: Path, values: dict[str, object]) -> str:
+    """Fill the SQL template with resolved time, bbox, and altitude values."""
     template_text = template_path.read_text(encoding="utf-8")
     return Template(template_text).substitute(values)
 
 
 def get_unique_output_path(output_path: Path) -> Path:
+    """Avoid overwriting an existing export by choosing the next free filename."""
     if not output_path.exists():
         return output_path
 
@@ -113,6 +125,7 @@ def run_trino_query(
     query_text: str,
     output_path: Path,
 ) -> None:
+    """Execute the Trino CLI and write its CSV output to disk."""
     resolved_trino_path = resolve_trino_path(trino_path)
     # Shell out to the Trino CLI rather than bundling a client dependency into
     # the repo.
@@ -153,6 +166,7 @@ def run_trino_query(
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse CLI arguments for the OpenSky export workflow."""
     folder = Path(__file__).resolve().parent
     parser = argparse.ArgumentParser(description="Export OpenSky flight data with Trino.")
     parser.add_argument("--date", default="2019-03-09", help="Local date in YYYY-MM-DD format.")
@@ -201,6 +215,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    """Resolve query parameters, run Trino, and save one CSV export."""
     args = parse_args()
 
     if not args.user:

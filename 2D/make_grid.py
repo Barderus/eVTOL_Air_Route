@@ -1,10 +1,18 @@
+"""Build the static Chicago-area routing grid and its risk layers.
+
+This script creates the base GeoJSON used by the rest of the project. It turns
+population density and simplified airport-airspace assumptions into per-cell
+cost fields that later feed the A* routing workflow.
+"""
+
 import numpy as np
 import pandas as pd
 import geopandas as gpd
 from pathlib import Path
 from shapely.geometry import box, Point, Polygon
 
-# Initial set up
+# Initial setup
+# Every downstream route artifact assumes this 500 m study grid.
 CELL_SIZE_M = 500
 BASE_DIR = Path(__file__).resolve().parent
 REPO_ROOT = BASE_DIR.parent

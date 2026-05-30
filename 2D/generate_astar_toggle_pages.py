@@ -1,5 +1,13 @@
 from __future__ import annotations
 
+"""Build the main multi-date route artifacts used by the project.
+
+This script precomputes A* routes for every configured destination, traffic
+dataset, and route-weight preset. It writes one GeoJSON per destination and one
+self-contained Leaflet HTML page per destination so route comparisons can be
+reviewed without rerunning Python code.
+"""
+
 import json
 import math
 from pathlib import Path
@@ -506,6 +514,7 @@ def normalize(
     transform: str | None = None,
     power: float = 1.0,
 ) -> tuple[np.ndarray, float]:
+    """Scale a cost array into the 0-1 range for route weighting."""
     array = np.asarray(values, dtype=float)
     array = np.clip(array, 0.0, None)
 
@@ -540,10 +549,12 @@ def normalize(
 
 
 def path_cost(graph: nx.Graph, path: list[int], weight: str) -> float:
+    """Return the summed edge cost for a path using one named weight field."""
     return sum(graph[path[i]][path[i + 1]][weight] for i in range(len(path) - 1))
 
 
 def detect_csv_encoding(csv_path: Path) -> str:
+    """Handle the common BOM variants seen in exported CSV files."""
     with csv_path.open("rb") as file_handle:
         first_bytes = file_handle.read(4)
 
@@ -555,6 +566,7 @@ def detect_csv_encoding(csv_path: Path) -> str:
 
 
 def build_graph(grid: gpd.GeoDataFrame) -> tuple[nx.Graph, gpd.GeoSeries, np.ndarray, np.ndarray]:
+    """Turn the routing grid into a graph where touching cells are neighbors."""
     graph = nx.Graph()
     for index, row in grid.iterrows():
         graph.add_node(
@@ -590,6 +602,7 @@ def node_for_point(
     geoms: gpd.GeoSeries,
     centroids_m: gpd.GeoSeries,
 ) -> int:
+    """Map a lat/lon point onto the containing grid cell or nearest centroid."""
     point = Point(lon, lat)
     for index in sindex.intersection(point.bounds):
         if geoms.iloc[index].contains(point):
@@ -602,6 +615,7 @@ def node_for_point(
 
 
 def make_heuristic(distance_weight: float, cent_x: np.ndarray, cent_y: np.ndarray, max_edge_distance: float):
+    """Build the admissible A* heuristic for one route specification."""
     if distance_weight <= 0:
         return lambda _u, _v: 0.0
 
@@ -614,6 +628,7 @@ def make_heuristic(distance_weight: float, cent_x: np.ndarray, cent_y: np.ndarra
 
 
 def route_line(grid: gpd.GeoDataFrame, path: list[int], simplify_tolerance_m: float = 0.0) -> LineString:
+    """Render a node path as a centroid line, with optional simplification."""
     line = LineString([grid.loc[node].geometry.centroid for node in path])
     if simplify_tolerance_m <= 0:
         return line
@@ -631,6 +646,7 @@ def route_line(grid: gpd.GeoDataFrame, path: list[int], simplify_tolerance_m: fl
 
 
 def direct_route_line(start: dict[str, object], destination: dict[str, object]) -> LineString:
+    """Build a straight reference line between the start and destination."""
     return LineString(
         [
             Point(float(start["lon"]), float(start["lat"])),
@@ -640,6 +656,7 @@ def direct_route_line(start: dict[str, object], destination: dict[str, object]) 
 
 
 def load_traffic_counts(csv_path: Path, grid: gpd.GeoDataFrame) -> np.ndarray:
+    """Convert raw OpenSky observations into per-cell counts for one dataset."""
     data = pd.read_csv(csv_path, encoding=detect_csv_encoding(csv_path))
     data = data.dropna(subset=["lat", "lon"]).copy()
     data["lat"] = pd.to_numeric(data["lat"], errors="coerce")
@@ -675,6 +692,7 @@ def assign_route_edge_weights(
     airspace_risk_norm: np.ndarray,
     traffic_risk_norm: np.ndarray,
 ) -> float:
+    """Project normalized cell costs onto graph edges for every route preset."""
     neighbor_distances = []
     for u, v in graph.edges():
         dx = cent_x[u] - cent_x[v]
@@ -704,6 +722,7 @@ def assign_route_edge_weights(
 
 
 def build_route_features() -> dict[str, gpd.GeoDataFrame]:
+    """Build every destination/date/preset route feature used by the HTML pages."""
     grid = gpd.read_file(GRID_PATH).reset_index(drop=True)
     graph, centroids_m, cent_x, cent_y = build_graph(grid)
     sindex = grid.sindex
@@ -791,6 +810,7 @@ def build_route_features() -> dict[str, gpd.GeoDataFrame]:
 
 
 def write_html(destination: dict[str, object], route_geojson: dict[str, object]) -> None:
+    """Write one self-contained Leaflet page for a single destination."""
     page_title = f"Clow To {destination['label']} A* Route"
     output_path = HTML_OUTPUT / f"clow_to_{destination['slug']}_astar.html"
     # Emit a single self-contained HTML artifact per destination.
@@ -814,6 +834,7 @@ def write_html(destination: dict[str, object], route_geojson: dict[str, object])
 
 
 def main() -> None:
+    """Generate all tracked route GeoJSON and HTML artifacts."""
     HTML_OUTPUT.mkdir(parents=True, exist_ok=True)
     GEOJSON_OUTPUT.mkdir(parents=True, exist_ok=True)
     routes_by_destination = build_route_features()
