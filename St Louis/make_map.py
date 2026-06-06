@@ -4,6 +4,7 @@ import os
 
 import geopandas as gpd
 import numpy as np
+import pandas as pd
 from shapely.geometry import box
 
 import settings
@@ -49,6 +50,49 @@ def build_base_grid():
     return gpd.clip(grid, study_area).reset_index(drop=True)
 
 
+def add_population_risk(grid):
+    """Assign block-group population density to each grid-cell centroid."""
+    population = gpd.read_file(settings.POPULATION_GEOJSON).to_crs(CRS_METERS)
+    required_columns = {"density_p_km2", "density_risk"}
+    missing_columns = required_columns - set(population.columns)
+    if missing_columns:
+        missing_text = ", ".join(sorted(missing_columns))
+        raise ValueError(f"Population GeoJSON is missing columns: {missing_text}")
+
+    centroids = gpd.GeoDataFrame(
+        {"cell_id": np.arange(len(grid))},
+        geometry=grid.geometry.centroid,
+        crs=grid.crs,
+    )
+    population_join = gpd.sjoin(
+        centroids,
+        population[["density_p_km2", "density_risk", "geometry"]],
+        how="left",
+        predicate="within",
+    )
+    population_join = population_join.drop_duplicates("cell_id")
+    population_join = population_join.set_index("cell_id").reindex(
+        range(len(grid))
+    )
+
+    grid["density_p_km2"] = pd.to_numeric(
+        population_join["density_p_km2"],
+        errors="coerce",
+    ).fillna(0.0)
+    grid["density_risk"] = population_join["density_risk"].fillna("low")
+    grid["city_risk"] = (grid["density_p_km2"] / 10.0).clip(0, 120)
+    grid["pop_class"] = grid["density_risk"].str.title()
+
+    # Preserve the Chicago grid schema until airport risk is added.
+    grid["airport_risk"] = 0.0
+    grid["airport_risk_combined"] = 0.0
+    grid["air_class"] = "Low"
+    grid["density_type"] = "population"
+    grid["risk_cost"] = settings.POPULATION_WEIGHT * grid["city_risk"]
+    grid["risk_class"] = grid["pop_class"]
+    return grid
+
+
 def main():
     grid = build_base_grid()
 
@@ -57,15 +101,19 @@ def main():
             f"Population file not found: {settings.POPULATION_GEOJSON}"
         )
 
-    raise NotImplementedError(
-        "The St. Louis base grid is configured, but its population join and "
-        "airspace risk model still need verified local data before the grid "
-        "can be saved."
+    grid = add_population_risk(grid)
+    grid.to_crs(CRS_LAT_LON).to_file(
+        settings.RISK_GRID_GEOJSON,
+        driver="GeoJSON",
     )
+
+    print(f"Grid cells: {len(grid)}")
+    print(grid["pop_class"].value_counts().to_string())
+    print(f"Saved St. Louis risk grid: {settings.RISK_GRID_GEOJSON}")
 
 
 if __name__ == "__main__":
     try:
         main()
-    except (FileNotFoundError, NotImplementedError, ValueError) as error:
+    except (FileNotFoundError, ValueError) as error:
         raise SystemExit(str(error)) from error
