@@ -2,21 +2,33 @@
 
 
 # Study area
-WEST = None
-SOUTH = None
-EAST = None
-NORTH = None
-MAP_CENTER_LAT = None
-MAP_CENTER_LON = None
+WEST = -90.839767
+SOUTH = 38.432831
+EAST = -89.678330
+NORTH = 38.902497
+MAP_CENTER_LAT = 38.667664
+MAP_CENTER_LON = -90.259049
 MAP_ZOOM = 10
 CELL_SIZE_M = 500
 
+# Required map landmarks
+LOCATIONS = {
+    "st_louis_downtown": (38.627003, -90.199402),
+    "st_louis_downtown_airport": (38.5703611, -90.1550833),
+    "st_louis_lambert_airport": (38.7486982, -90.3700257),
+    "midamerica_st_louis_airport": (38.5451731, -89.8351856),
+}
+
 # Source data
-POPULATION_SOURCE = "St Louis/population/source_population_data"
+POPULATION_CSV = "St Louis/population/population_data.csv"
+BLOCK_GROUP_SHAPEFILE = (
+    "St Louis/population/tl_2025_29_bg/tl_2025_29_bg.shp"
+)
 POPULATION_GEOJSON = "St Louis/population/st_louis_population_density.geojson"
 
 # Generated outputs
 RISK_GRID_GEOJSON = "St Louis/maps/st_louis_risk_grid.geojson"
+MAP_HTML = "St Louis/maps/st_louis_map.html"
 TRAFFIC_FOLDER = "St Louis/traffic/output"
 ROUTE_GEOJSON_FOLDER = "St Louis/routes/output"
 ROUTE_HTML_FOLDER = "St Louis/maps"
