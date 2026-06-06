@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>St. Louis eVTOL Risk Map</title>
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.6.0/dist/leaflet.css"
+    integrity="sha512-xwE/Az9zrjBIphAcBb3F6JVqxf46+CDLwfLMHloNu6KEQCAWi6HcDUbeOfBIptF7tcCzusKFjFw2yuvEpDL9wQ=="
+    crossorigin=""
+  />
+  <style>
+    :root {
+      color-scheme: light;
+      --surface: #ffffff;
+      --surface-soft: #f5f7f8;
+      --line: #cfd7dd;
+      --text: #172026;
+      --muted: #5f6f7a;
+      --active: #165a72;
+      --low: #2ca25f;
+      --medium-pop: #6baed6;
+      --high-pop: #08306b;
+    }
+
+    * { box-sizing: border-box; }
+
+    html,
+    body {
+      height: 100%;
+      margin: 0;
+      color: var(--text);
+      font-family: Arial, Helvetica, sans-serif;
+      overflow: hidden;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      background: var(--surface-soft);
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--line);
+      background: var(--surface);
+      z-index: 1000;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 17px;
+      line-height: 1.2;
+    }
+
+    .status {
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .segmented {
+      display: inline-grid;
+      grid-template-columns: repeat(3, minmax(108px, 1fr));
+      min-height: 38px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      overflow: hidden;
+      background: var(--surface);
+    }
+
+    .segmented button {
+      padding: 8px 12px;
+      border: 0;
+      border-right: 1px solid var(--line);
+      color: var(--text);
+      background: transparent;
+      font: inherit;
+      font-size: 13px;
+    }
+
+    .segmented button:last-child { border-right: 0; }
+    .segmented button.active { color: #ffffff; background: var(--active); }
+    .segmented button:disabled { color: #87939b; background: #eef1f3; }
+
+    #map {
+      flex: 1 1 auto;
+      width: 100%;
+      height: calc(100vh - 59px);
+      min-height: 360px;
+    }
+
+    .legend-box {
+      padding: 10px 12px;
+      border: 1px solid rgba(23, 32, 38, 0.15);
+      border-radius: 7px;
+      background: rgba(255, 255, 255, 0.96);
+      box-shadow: 0 6px 18px rgba(23, 32, 38, 0.14);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .legend-title { margin-bottom: 7px; font-weight: 700; }
+    .legend-row {
+      display: grid;
+      grid-template-columns: 14px auto;
+      align-items: center;
+      gap: 7px;
+      margin: 5px 0;
+      white-space: nowrap;
+    }
+
+    .swatch {
+      width: 14px;
+      height: 14px;
+      border: 1px solid rgba(23, 32, 38, 0.28);
+    }
+
+    .popup-grid {
+      display: grid;
+      grid-template-columns: auto auto;
+      gap: 3px 12px;
+      min-width: 190px;
+    }
+
+    .popup-grid dt { color: var(--muted); font-weight: 600; }
+    .popup-grid dd { margin: 0; text-align: right; }
+
+    @media (max-width: 720px) {
+      .toolbar { align-items: stretch; flex-direction: column; gap: 9px; }
+      .segmented { width: 100%; grid-template-columns: repeat(3, 1fr); }
+      #map { height: calc(100vh - 105px); }
+    }
+  </style>
+</head>
+<body>
+  <header class="toolbar">
+    <div>
+      <h1>St. Louis eVTOL Risk Map</h1>
+      <div id="status" class="status">Loading population grid...</div>
+    </div>
+    <div class="segmented" role="group" aria-label="Risk layers">
+      <button type="button" disabled title="Airport airspace is not configured">Combined</button>
+      <button type="button" disabled title="Airport airspace is not configured">Airspace</button>
+      <button class="active" type="button" aria-pressed="true">Population</button>
+    </div>
+  </header>
+
+  <main id="map" aria-label="St. Louis eVTOL population-risk map"></main>
+
+  <script
+    src="https://unpkg.com/leaflet@1.6.0/dist/leaflet.js"
+    integrity="sha512-gZwIG9x3wUXg2hdXF6+rVkLF/0Vi9U8D2Ntg4Ga5I5BZpVkVxlJWbSQtXPSiUTtC0TjtGOmxa1AJPuV0CPthew=="
+    crossorigin=""
+  ></script>
+  <script>
+    const GRID_URL = "st_louis_risk_grid.geojson";
+    const STUDY_BOUNDS = L.latLngBounds(
+      [38.432831, -90.839767],
+      [38.902497, -89.67833]
+    );
+    const locations = {"st_louis_downtown": [38.627003, -90.199402], "st_louis_downtown_airport": [38.5703611, -90.1550833], "st_louis_lambert_airport": [38.7486982, -90.3700257], "midamerica_st_louis_airport": [38.5451731, -89.8351856]};
+    const labels = {"st_louis_downtown": "Downtown St. Louis", "st_louis_downtown_airport": "St. Louis Downtown Airport", "st_louis_lambert_airport": "St. Louis Lambert International Airport", "midamerica_st_louis_airport": "MidAmerica St. Louis Airport"};
+    const colors = {
+      Low: "#2ca25f",
+      Medium: "#6baed6",
+      High: "#08306b"
+    };
+
+    const statusEl = document.getElementById("status");
+    const map = L.map("map", {
+      center: [38.667664, -90.259049],
+      zoom: 10,
+      maxBounds: STUDY_BOUNDS.pad(0.04),
+      maxBoundsViscosity: 0.9,
+      preferCanvas: true,
+      zoomControl: true
+    });
+
+    map.fitBounds(STUDY_BOUNDS, { padding: [20, 20] });
+
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+      maxZoom: 19,
+      attribution: "&copy; OpenStreetMap contributors &copy; CARTO"
+    }).addTo(map);
+
+    const landmarkLayer = L.layerGroup(
+      Object.entries(locations).map(([name, coordinates]) => {
+        const isAirport = name.endsWith("airport");
+        return L.circleMarker(coordinates, {
+          radius: isAirport ? 7 : 6,
+          color: "#111827",
+          weight: 2,
+          fillColor: isAirport ? "#22c55e" : "#dc2626",
+          fillOpacity: 0.95
+        }).bindPopup(`<b>${labels[name]}</b>`);
+      })
+    ).addTo(map);
+
+    L.control.layers(
+      null,
+      { "Landmarks": landmarkLayer },
+      { collapsed: false, position: "topright" }
+    ).addTo(map);
+
+    function fmt(value, digits = 1) {
+      const number = Number(value);
+      return Number.isFinite(number) ? number.toFixed(digits) : "n/a";
+    }
+
+    function populationColor(feature) {
+      const populationClass = feature.properties?.pop_class || "Low";
+      return colors[populationClass] || colors.Low;
+    }
+
+    function populationStyle(feature) {
+      const color = populationColor(feature);
+      return {
+        color,
+        weight: 0.35,
+        opacity: 0.45,
+        fillColor: color,
+        fillOpacity: 0.58
+      };
+    }
+
+    function popupHtml(feature) {
+      const properties = feature.properties || {};
+      return `
+        <dl class="popup-grid">
+          <dt>Population risk</dt><dd>${properties.pop_class ?? "n/a"}</dd>
+          <dt>Population density</dt><dd>${fmt(properties.density_p_km2)} people/km²</dd>
+          <dt>Population cost</dt><dd>${fmt(properties.city_risk)}</dd>
+          <dt>Cell size</dt><dd>500 m</dd>
+        </dl>
+      `;
+    }
+
+    const legend = L.control({ position: "bottomright" });
+    legend.onAdd = function() {
+      const div = L.DomUtil.create("div", "legend-box");
+      div.innerHTML = `
+        <div class="legend-title">Population Layer</div>
+        <div class="legend-row"><span class="swatch" style="background:${colors.Low}"></span><span>Low population risk</span></div>
+        <div class="legend-row"><span class="swatch" style="background:${colors.Medium}"></span><span>Medium population risk</span></div>
+        <div class="legend-row"><span class="swatch" style="background:${colors.High}"></span><span>High population risk</span></div>
+      `;
+      return div;
+    };
+    legend.addTo(map);
+
+    fetch(GRID_URL)
+      .then((response) => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json();
+      })
+      .then((data) => {
+        const gridLayer = L.geoJSON(data, {
+          renderer: L.canvas({ padding: 0.35 }),
+          style: populationStyle,
+          onEachFeature: (feature, layer) => {
+            layer.bindPopup(() => popupHtml(feature), { maxWidth: 300 });
+            layer.on({
+              mouseover: () => layer.setStyle({ weight: 1.5, color: "#172026", fillOpacity: 0.72 }),
+              mouseout: () => gridLayer.resetStyle(layer)
+            });
+          }
+        }).addTo(map);
+        statusEl.textContent = `${data.features.length.toLocaleString()} population grid cells loaded`;
+      })
+      .catch((error) => {
+        statusEl.textContent = `Unable to load population grid: ${error.message}`;
+      });
+  </script>
+</body>
+</html>
