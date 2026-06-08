@@ -122,6 +122,76 @@ def add_edge_weights(
             + settings.TRAFFIC_WEIGHT * traffic_cost
         )
 
+    return maximum_distance
+
+
+def calculate_path_costs(
+    path,
+    centroid_x,
+    centroid_y,
+    population_risk,
+    airspace_risk,
+    traffic_risk,
+    maximum_distance,
+):
+    """Calculate weighted cost contributions for one route path."""
+    distance_cost = 0.0
+    population_cost = 0.0
+    airspace_cost = 0.0
+    traffic_cost = 0.0
+    route_distance_m = 0.0
+
+    for start_node, end_node in zip(path, path[1:]):
+        edge_distance = math.hypot(
+            centroid_x[start_node] - centroid_x[end_node],
+            centroid_y[start_node] - centroid_y[end_node],
+        )
+        route_distance_m += edge_distance
+
+        distance_cost += (
+            settings.DISTANCE_WEIGHT * edge_distance / maximum_distance
+        )
+        population_cost += settings.POPULATION_WEIGHT * (
+            population_risk[start_node] + population_risk[end_node]
+        ) / 2.0
+        airspace_cost += settings.AIRSPACE_WEIGHT * (
+            airspace_risk[start_node] + airspace_risk[end_node]
+        ) / 2.0
+        traffic_cost += settings.TRAFFIC_WEIGHT * (
+            traffic_risk[start_node] + traffic_risk[end_node]
+        ) / 2.0
+
+    total_cost = (
+        distance_cost
+        + population_cost
+        + airspace_cost
+        + traffic_cost
+    )
+
+    if total_cost > 0:
+        distance_percent = 100.0 * distance_cost / total_cost
+        population_percent = 100.0 * population_cost / total_cost
+        airspace_percent = 100.0 * airspace_cost / total_cost
+        traffic_percent = 100.0 * traffic_cost / total_cost
+    else:
+        distance_percent = 0.0
+        population_percent = 0.0
+        airspace_percent = 0.0
+        traffic_percent = 0.0
+
+    return {
+        "total_cost": total_cost,
+        "route_distance_km": route_distance_m / 1000.0,
+        "distance_cost": distance_cost,
+        "population_cost": population_cost,
+        "airspace_cost": airspace_cost,
+        "traffic_cost": traffic_cost,
+        "distance_percent": distance_percent,
+        "population_percent": population_percent,
+        "airspace_percent": airspace_percent,
+        "traffic_percent": traffic_percent,
+    }
+
 
 def make_route_geometry(projected_grid, path):
     """Create one route line from the selected grid cells."""
@@ -151,14 +221,8 @@ def main():
     graph, projected_grid, centroid_x, centroid_y = build_graph(grid)
     population_risk = normalize(grid["city_risk"])
     airspace_risk = normalize(grid["airport_risk_combined"])
-    start_node = find_grid_cell(
-        settings.START["lat"],
-        settings.START["lon"],
-        grid,
-        projected_grid,
-    )
-
     route_rows = []
+    analysis_rows = []
     route_geometries = []
 
     for dataset in settings.TRAFFIC_DATASETS:
@@ -167,7 +231,7 @@ def main():
             raise FileNotFoundError(f"Traffic file not found: {csv_path}")
 
         traffic_risk = normalize(load_traffic_counts(csv_path, grid))
-        add_edge_weights(
+        maximum_distance = add_edge_weights(
             graph,
             centroid_x,
             centroid_y,
@@ -176,22 +240,52 @@ def main():
             traffic_risk,
         )
 
-        for destination in settings.DESTINATIONS:
+        for route in settings.ROUTES:
+            start_latitude, start_longitude = route["start"]
+            destination_latitude, destination_longitude = route["destination"]
+            start_node = find_grid_cell(
+                start_latitude,
+                start_longitude,
+                grid,
+                projected_grid,
+            )
             end_node = find_grid_cell(
-                destination["lat"],
-                destination["lon"],
+                destination_latitude,
+                destination_longitude,
                 grid,
                 projected_grid,
             )
             path = nx.astar_path(graph, start_node, end_node, weight="weight")
+            path_costs = calculate_path_costs(
+                path,
+                centroid_x,
+                centroid_y,
+                population_risk,
+                airspace_risk,
+                traffic_risk,
+                maximum_distance,
+            )
 
             route_rows.append(
                 {
+                    "route": route["label"],
                     "dataset": dataset["label"],
-                    "destination": destination["label"],
+                    "date": dataset["date"],
+                    "origin": route["start_label"],
+                    "destination": route["destination_label"],
                     "path_nodes": len(path),
                 }
             )
+            analysis_row = {
+                "route": route["label"],
+                "dataset": dataset["label"],
+                "date": dataset["date"],
+                "origin": route["start_label"],
+                "destination": route["destination_label"],
+                "path_nodes": len(path),
+            }
+            analysis_row.update(path_costs)
+            analysis_rows.append(analysis_row)
             route_geometries.append(make_route_geometry(projected_grid, path))
 
     routes = gpd.GeoDataFrame(
@@ -207,6 +301,28 @@ def main():
     )
     routes.to_file(output_path, driver="GeoJSON")
     print(f"Saved St. Louis routes: {output_path}")
+
+    analysis_columns = [
+        "route",
+        "dataset",
+        "date",
+        "origin",
+        "destination",
+        "path_nodes",
+        "route_distance_km",
+        "total_cost",
+        "distance_cost",
+        "distance_percent",
+        "population_cost",
+        "population_percent",
+        "airspace_cost",
+        "airspace_percent",
+        "traffic_cost",
+        "traffic_percent",
+    ]
+    analysis = pd.DataFrame(analysis_rows)[analysis_columns]
+    analysis.to_csv(settings.ROUTE_ANALYSIS_CSV, index=False)
+    print(f"Saved route cost analysis: {settings.ROUTE_ANALYSIS_CSV}")
 
 
 if __name__ == "__main__":
