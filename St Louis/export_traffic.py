@@ -18,7 +18,7 @@ TRINO_JAR = r"C:\path\to\trino-cli.jar"
 TRINO_SERVER = "https://trino.opensky-network.org"
 TRINO_CATALOG = "minio"
 TRINO_SCHEMA = "osky"
-QUERY_FILE = "St Louis/traffic/query.sql"
+QUERY_FILE = "traffic/query.sql"
 
 NM_TO_KM = 1.852
 FEET_TO_METERS = 0.3048

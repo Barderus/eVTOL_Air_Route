@@ -72,11 +72,11 @@ POPULATION_SOURCES = [
 POPULATION_GEOJSON = "population/st_louis_population_density.geojson"
 
 # Generated outputs
-RISK_GRID_GEOJSON = "St Louis/maps/st_louis_risk_grid.geojson"
-MAP_HTML = "St Louis/maps/st_louis_map.html"
-TRAFFIC_FOLDER = "St Louis/traffic/output"
-ROUTE_GEOJSON_FOLDER = "St Louis/routes/output"
-ROUTE_HTML_FOLDER = "St Louis/maps"
+RISK_GRID_GEOJSON = "maps/st_louis_risk_grid.geojson"
+MAP_HTML = "maps/st_louis_map.html"
+TRAFFIC_FOLDER = "traffic/output"
+ROUTE_GEOJSON_FOLDER = "routes/output"
+ROUTE_HTML_FOLDER = "maps"
 
 # Route endpoints
 START = None
