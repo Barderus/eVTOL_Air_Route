@@ -223,16 +223,25 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       attribution: "&copy; OpenStreetMap contributors &copy; CARTO"
     }}).addTo(map);
 
+    const airportIcon = L.icon({{
+      iconUrl: "../../Chicago/images/icons/airplane.svg",
+      iconSize: [26, 26],
+      iconAnchor: [13, 13],
+      popupAnchor: [0, -12]
+    }});
+
+    const downtownIcon = L.icon({{
+      iconUrl: "../../Chicago/images/icons/city.svg",
+      iconSize: [28, 28],
+      iconAnchor: [14, 14],
+      popupAnchor: [0, -12]
+    }});
+
     const landmarkLayer = L.layerGroup(
       Object.entries(locations).map(([name, coordinates]) => {{
         const isAirport = name.endsWith("airport");
-        return L.circleMarker(coordinates, {{
-          radius: isAirport ? 7 : 6,
-          color: "#111827",
-          weight: 2,
-          fillColor: isAirport ? "#22c55e" : "#dc2626",
-          fillOpacity: 0.95
-        }}).bindPopup(`<b>${{labels[name]}}</b>`);
+        const icon = isAirport ? airportIcon : downtownIcon;
+        return L.marker(coordinates, {{ icon }}).bindPopup(`<b>${{labels[name]}}</b>`);
       }})
     ).addTo(map);
 
@@ -245,11 +254,17 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       return [latitude + (radius / 111320), longitude];
     }}
 
+    function radiusLabel(radius) {{
+      return Number.isInteger(radius) ? radius.toFixed(0) : radius.toFixed(1);
+    }}
+
     const airspaceRingLayer = L.layerGroup(
       airspaceSites.flatMap((site) => {{
         const [latitude, longitude] = site.location;
         const rings = [{{
-          label: `${{site.code}} ${{site.inner_radius}} ${{site.inner_unit}} core`,
+          label:
+            `${{site.code}} ${{radiusLabel(site.inner_radius)}} ` +
+            `${{site.inner_unit}}`,
           radius: radiusMeters(site.inner_radius, site.inner_unit),
           color: "#b30000",
           dashArray: "8 6"
@@ -257,7 +272,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
         if (site.outer_radius !== null) {{
           rings.push({{
-            label: `${{site.code}} ${{site.outer_radius}} ${{site.outer_unit}} shelf`,
+            label:
+              `${{site.code}} ${{radiusLabel(site.outer_radius)}} ` +
+              `${{site.outer_unit}}`,
             radius: radiusMeters(site.outer_radius, site.outer_unit),
             color: "#f1c40f",
             dashArray: "14 7"
@@ -265,9 +282,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         }}
 
         return rings.flatMap((ring) => {{
-          const displayRadius = ring.radius + (CELL_SIZE_M / 2);
           const circle = L.circle([latitude, longitude], {{
-            radius: displayRadius,
+            radius: ring.radius,
             color: ring.color,
             weight: 2.2,
             opacity: 0.95,
@@ -280,7 +296,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
             `${{site.vertical_range}}`
           );
           const label = L.marker(
-            ringLabelLatLng(latitude, longitude, displayRadius),
+            ringLabelLatLng(latitude, longitude, ring.radius),
             {{
               interactive: false,
               icon: L.divIcon({{
