@@ -136,6 +136,10 @@ def add_airspace_risk(grid):
             site["outer_radius"],
             site["outer_unit"],
         )
+        if outer_radius_m <= inner_radius_m:
+            raise ValueError(
+                f"{site['code']} outer radius must be larger than its inner radius."
+            )
         shelf_mask = (distances > inner_radius_m) & (
             distances <= outer_radius_m
         )
