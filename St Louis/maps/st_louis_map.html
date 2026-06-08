@@ -179,8 +179,8 @@
   <script>
     const GRID_URL = "st_louis_risk_grid.geojson";
     const STUDY_BOUNDS = L.latLngBounds(
-      [38.432831, -90.839767],
-      [39.00694, -89.67833]
+      [38.432831, -90.5014],
+      [38.8631, -89.67833]
     );
     const locations = {"st_louis_downtown": [38.627003, -90.199402], "st_louis_downtown_airport": [38.5703611, -90.1550833], "st_louis_lambert_airport": [38.7486982, -90.3700257], "midamerica_st_louis_airport": [38.5451731, -89.8351856]};
     const labels = {"st_louis_downtown": "Downtown St. Louis", "st_louis_downtown_airport": "St. Louis Downtown Airport", "st_louis_lambert_airport": "St. Louis Lambert International Airport", "midamerica_st_louis_airport": "MidAmerica St. Louis Airport"};
@@ -202,13 +202,9 @@
     const map = L.map("map", {
       center: [38.719886, -90.259049],
       zoom: 10,
-      maxBounds: STUDY_BOUNDS.pad(0.04),
-      maxBoundsViscosity: 0.9,
       preferCanvas: true,
       zoomControl: true
     });
-
-    map.fitBounds(STUDY_BOUNDS, { padding: [20, 20] });
 
     L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
       maxZoom: 19,
@@ -223,7 +219,7 @@
     });
 
     const downtownIcon = L.icon({
-      iconUrl: "../../Chicago/images/icons/city.svg",
+      iconUrl: "icons/city.svg",
       iconSize: [28, 28],
       iconAnchor: [14, 14],
       popupAnchor: [0, -12]

@@ -210,13 +210,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     const map = L.map("map", {{
       center: [{center_lat}, {center_lon}],
       zoom: {zoom},
-      maxBounds: STUDY_BOUNDS.pad(0.04),
-      maxBoundsViscosity: 0.9,
       preferCanvas: true,
       zoomControl: true
     }});
-
-    map.fitBounds(STUDY_BOUNDS, {{ padding: [20, 20] }});
 
     L.tileLayer("https://{{s}}.basemaps.cartocdn.com/light_all/{{z}}/{{x}}/{{y}}{{r}}.png", {{
       maxZoom: 19,
@@ -231,7 +227,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     }});
 
     const downtownIcon = L.icon({{
-      iconUrl: "../../Chicago/images/icons/city.svg",
+      iconUrl: "icons/city.svg",
       iconSize: [28, 28],
       iconAnchor: [14, 14],
       popupAnchor: [0, -12]
