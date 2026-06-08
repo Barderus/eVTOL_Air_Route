@@ -28,8 +28,13 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       --muted: #5f6f7a;
       --active: #165a72;
       --low: #2ca25f;
+      --medium-combined: #f4b183;
+      --high-combined: #c84c5a;
+      --medium-air: #f1c40f;
+      --high-air: #b30000;
       --medium-pop: #6baed6;
       --high-pop: #08306b;
+      --no-data: #9ca3af;
     }}
 
     * {{ box-sizing: border-box; }}
@@ -93,8 +98,8 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     }}
 
     .segmented button:last-child {{ border-right: 0; }}
+    .segmented button:hover {{ background: #eef3f5; cursor: pointer; }}
     .segmented button.active {{ color: #ffffff; background: var(--active); }}
-    .segmented button:disabled {{ color: #87939b; background: #eef1f3; }}
 
     #map {{
       flex: 1 1 auto;
@@ -139,6 +144,19 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     .popup-grid dt {{ color: var(--muted); font-weight: 600; }}
     .popup-grid dd {{ margin: 0; text-align: right; }}
 
+    .ring-label {{
+      padding: 3px 7px;
+      border: 1px solid rgba(23, 32, 38, 0.16);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.92);
+      box-shadow: 0 4px 10px rgba(23, 32, 38, 0.12);
+      color: var(--text);
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1;
+      white-space: nowrap;
+    }}
+
     @media (max-width: 720px) {{
       .toolbar {{ align-items: stretch; flex-direction: column; gap: 9px; }}
       .segmented {{ width: 100%; grid-template-columns: repeat(3, 1fr); }}
@@ -150,12 +168,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   <header class="toolbar">
     <div>
       <h1>St. Louis eVTOL Risk Map</h1>
-      <div id="status" class="status">Loading population grid...</div>
+      <div id="status" class="status">Loading risk grid...</div>
     </div>
     <div class="segmented" role="group" aria-label="Risk layers">
-      <button type="button" disabled title="Airport airspace is not configured">Combined</button>
-      <button type="button" disabled title="Airport airspace is not configured">Airspace</button>
-      <button class="active" type="button" aria-pressed="true">Population</button>
+      <button id="btnCombined" class="active" type="button" aria-pressed="true">Combined</button>
+      <button id="btnAir" type="button" aria-pressed="false">Airspace</button>
+      <button id="btnPop" type="button" aria-pressed="false">Population</button>
     </div>
   </header>
 
@@ -174,10 +192,18 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     );
     const locations = {locations};
     const labels = {labels};
+    const airspaceSites = {airspace_sites};
+    const CELL_SIZE_M = {cell_size_m};
+    const NM_TO_M = 1852;
     const colors = {{
-      Low: "#2ca25f",
-      Medium: "#6baed6",
-      High: "#08306b"
+      low: "#2ca25f",
+      mediumCombined: "#f4b183",
+      highCombined: "#c84c5a",
+      mediumAir: "#f1c40f",
+      highAir: "#b30000",
+      mediumPop: "#6baed6",
+      highPop: "#08306b",
+      noData: "#9ca3af"
     }};
 
     const statusEl = document.getElementById("status");
@@ -210,9 +236,71 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       }})
     ).addTo(map);
 
+    function radiusMeters(radius, unit) {{
+      if (unit !== "NM") throw new Error(`Unsupported airspace unit: ${{unit}}`);
+      return radius * NM_TO_M;
+    }}
+
+    function ringLabelLatLng(latitude, longitude, radius) {{
+      return [latitude + (radius / 111320), longitude];
+    }}
+
+    const airspaceRingLayer = L.layerGroup(
+      airspaceSites.flatMap((site) => {{
+        const [latitude, longitude] = site.location;
+        const rings = [{{
+          label: `${{site.code}} ${{site.inner_radius}} ${{site.inner_unit}} core`,
+          radius: radiusMeters(site.inner_radius, site.inner_unit),
+          color: "#b30000",
+          dashArray: "8 6"
+        }}];
+
+        if (site.outer_radius !== null) {{
+          rings.push({{
+            label: `${{site.code}} ${{site.outer_radius}} ${{site.outer_unit}} shelf`,
+            radius: radiusMeters(site.outer_radius, site.outer_unit),
+            color: "#f1c40f",
+            dashArray: "14 7"
+          }});
+        }}
+
+        return rings.flatMap((ring) => {{
+          const displayRadius = ring.radius + (CELL_SIZE_M / 2);
+          const circle = L.circle([latitude, longitude], {{
+            radius: displayRadius,
+            color: ring.color,
+            weight: 2.2,
+            opacity: 0.95,
+            dashArray: ring.dashArray,
+            fill: false
+          }}).bindPopup(
+            `<b>${{site.airport}}</b><br>` +
+            `${{site.airspace_type}}<br>` +
+            `${{ring.label}}<br>` +
+            `${{site.vertical_range}}`
+          );
+          const label = L.marker(
+            ringLabelLatLng(latitude, longitude, displayRadius),
+            {{
+              interactive: false,
+              icon: L.divIcon({{
+                className: "",
+                html: `<span class="ring-label">${{ring.label}}</span>`,
+                iconSize: null
+              }})
+            }}
+          );
+          return [circle, label];
+        }});
+      }})
+    ).addTo(map);
+
     L.control.layers(
       null,
-      {{ "Landmarks": landmarkLayer }},
+      {{
+        "Landmarks": landmarkLayer,
+        "Airspace rings": airspaceRingLayer
+      }},
       {{ collapsed: false, position: "topright" }}
     ).addTo(map);
 
@@ -221,46 +309,154 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       return Number.isFinite(number) ? number.toFixed(digits) : "n/a";
     }}
 
-    function populationColor(feature) {{
-      const populationClass = feature.properties?.pop_class || "Low";
-      return colors[populationClass] || colors.Low;
+    function combinedColor(feature) {{
+      const riskClass = feature.properties?.risk_class || "Low";
+      if (riskClass === "High") return colors.highCombined;
+      if (riskClass === "Medium") return colors.mediumCombined;
+      return colors.low;
     }}
 
-    function populationStyle(feature) {{
-      const color = populationColor(feature);
-      return {{
-        color,
-        weight: 0.35,
-        opacity: 0.45,
-        fillColor: color,
-        fillOpacity: 0.58
+    function airspaceColor(feature) {{
+      const airClass = feature.properties?.air_class || "Low";
+      if (airClass === "High") return colors.highAir;
+      if (airClass === "Medium") return colors.mediumAir;
+      return colors.low;
+    }}
+
+    function populationColor(feature) {{
+      const populationClass = feature.properties?.pop_class || "Low";
+      if (populationClass === "No Data") return colors.noData;
+      if (populationClass === "High") return colors.highPop;
+      if (populationClass === "Medium") return colors.mediumPop;
+      return colors.low;
+    }}
+
+    function gridStyle(colorFunction) {{
+      return function(feature) {{
+        const color = colorFunction(feature);
+        return {{
+          color,
+          weight: 0.35,
+          opacity: 0.45,
+          fillColor: color,
+          fillOpacity: 0.58
+        }};
       }};
     }}
 
     function popupHtml(feature) {{
       const properties = feature.properties || {{}};
-      return `
-        <dl class="popup-grid">
-          <dt>Population risk</dt><dd>${{properties.pop_class ?? "n/a"}}</dd>
-          <dt>Population density</dt><dd>${{fmt(properties.density_p_km2)}} people/km²</dd>
-          <dt>Population cost</dt><dd>${{fmt(properties.city_risk)}}</dd>
-          <dt>Cell size</dt><dd>{cell_size_m} m</dd>
-        </dl>
-      `;
+      return {{
+        combined: `
+          <dl class="popup-grid">
+            <dt>Risk class</dt><dd>${{properties.risk_class ?? "n/a"}}</dd>
+            <dt>Risk cost</dt><dd>${{fmt(properties.risk_cost)}}</dd>
+            <dt>Dominant</dt><dd>${{properties.density_type ?? "n/a"}}</dd>
+            <dt>Population</dt><dd>${{properties.pop_class ?? "n/a"}}</dd>
+            <dt>Airspace</dt><dd>${{properties.air_class ?? "n/a"}}</dd>
+            <dt>Pop risk</dt><dd>${{fmt(properties.city_risk)}}</dd>
+            <dt>Air risk</dt><dd>${{fmt(properties.airport_risk_combined)}}</dd>
+          </dl>
+        `,
+        air: `
+          <dl class="popup-grid">
+            <dt>Airspace risk</dt><dd>${{properties.air_class ?? "n/a"}}</dd>
+            <dt>Airspace cost</dt><dd>${{fmt(properties.airport_risk_combined)}}</dd>
+            <dt>Source</dt><dd>${{properties.airspace_source ?? "None"}}</dd>
+            <dt>Vertical range</dt><dd>${{properties.airspace_vertical_range ?? "None"}}</dd>
+            <dt>Cell size</dt><dd>${{CELL_SIZE_M}} m</dd>
+          </dl>
+        `,
+        pop: `
+          <dl class="popup-grid">
+            <dt>Population risk</dt><dd>${{properties.pop_class ?? "n/a"}}</dd>
+            <dt>Population density</dt><dd>${{fmt(properties.density_p_km2)}} people/km²</dd>
+            <dt>Population cost</dt><dd>${{fmt(properties.city_risk)}}</dd>
+            <dt>Cell size</dt><dd>${{CELL_SIZE_M}} m</dd>
+          </dl>
+        `
+      }};
+    }}
+
+    function makeGridLayer(data, mode, colorFunction) {{
+      let gridLayer;
+      gridLayer = L.geoJSON(data, {{
+        renderer: L.canvas({{ padding: 0.35 }}),
+        style: gridStyle(colorFunction),
+        onEachFeature: (feature, layer) => {{
+          layer.bindPopup(() => popupHtml(feature)[mode], {{ maxWidth: 320 }});
+          layer.on({{
+            mouseover: () => layer.setStyle({{ weight: 1.5, color: "#172026", fillOpacity: 0.72 }}),
+            mouseout: () => gridLayer.resetStyle(layer)
+          }});
+        }}
+      }});
+      return gridLayer;
     }}
 
     const legend = L.control({{ position: "bottomright" }});
     legend.onAdd = function() {{
       const div = L.DomUtil.create("div", "legend-box");
-      div.innerHTML = `
-        <div class="legend-title">Population Layer</div>
-        <div class="legend-row"><span class="swatch" style="background:${{colors.Low}}"></span><span>Low population risk</span></div>
-        <div class="legend-row"><span class="swatch" style="background:${{colors.Medium}}"></span><span>Medium population risk</span></div>
-        <div class="legend-row"><span class="swatch" style="background:${{colors.High}}"></span><span>High population risk</span></div>
-      `;
+      div.id = "legend";
       return div;
     }};
     legend.addTo(map);
+
+    const buttons = {{
+      combined: document.getElementById("btnCombined"),
+      air: document.getElementById("btnAir"),
+      pop: document.getElementById("btnPop")
+    }};
+    const legendRows = {{
+      combined: [
+        ["Low combined risk", colors.low],
+        ["Medium combined risk", colors.mediumCombined],
+        ["High combined risk", colors.highCombined]
+      ],
+      air: [
+        ["Low airspace risk", colors.low],
+        ["Medium airspace risk", colors.mediumAir],
+        ["High airspace risk", colors.highAir]
+      ],
+      pop: [
+        ["Low population risk", colors.low],
+        ["Medium population risk", colors.mediumPop],
+        ["High population risk", colors.highPop],
+        ["Population data unavailable", colors.noData]
+      ]
+    }};
+    const layerLabels = {{
+      combined: "Combined",
+      air: "Airspace",
+      pop: "Population"
+    }};
+    let activeMode = "combined";
+    let gridLayers = {{}};
+
+    function updateLegend() {{
+      const rows = legendRows[activeMode].map(([label, color]) => (
+        `<div class="legend-row"><span class="swatch" style="background:${{color}}"></span><span>${{label}}</span></div>`
+      )).join("");
+      document.getElementById("legend").innerHTML =
+        `<div class="legend-title">${{layerLabels[activeMode]}} Layer</div>${{rows}}`;
+    }}
+
+    function setMode(mode) {{
+      if (!gridLayers[mode]) return;
+      map.removeLayer(gridLayers[activeMode]);
+      activeMode = mode;
+      gridLayers[activeMode].addTo(map);
+      Object.entries(buttons).forEach(([buttonMode, button]) => {{
+        const isActive = buttonMode === activeMode;
+        button.classList.toggle("active", isActive);
+        button.setAttribute("aria-pressed", String(isActive));
+      }});
+      updateLegend();
+    }}
+
+    Object.entries(buttons).forEach(([mode, button]) => {{
+      button.addEventListener("click", () => setMode(mode));
+    }});
 
     fetch(GRID_URL)
       .then((response) => {{
@@ -268,18 +464,14 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         return response.json();
       }})
       .then((data) => {{
-        const gridLayer = L.geoJSON(data, {{
-          renderer: L.canvas({{ padding: 0.35 }}),
-          style: populationStyle,
-          onEachFeature: (feature, layer) => {{
-            layer.bindPopup(() => popupHtml(feature), {{ maxWidth: 300 }});
-            layer.on({{
-              mouseover: () => layer.setStyle({{ weight: 1.5, color: "#172026", fillOpacity: 0.72 }}),
-              mouseout: () => gridLayer.resetStyle(layer)
-            }});
-          }}
-        }}).addTo(map);
-        statusEl.textContent = `${{data.features.length.toLocaleString()}} population grid cells loaded`;
+        gridLayers = {{
+          combined: makeGridLayer(data, "combined", combinedColor),
+          air: makeGridLayer(data, "air", airspaceColor),
+          pop: makeGridLayer(data, "pop", populationColor)
+        }};
+        gridLayers.combined.addTo(map);
+        updateLegend();
+        statusEl.textContent = `${{data.features.length.toLocaleString()}} risk grid cells loaded`;
       }})
       .catch((error) => {{
         statusEl.textContent = `Unable to load population grid: ${{error.message}}`;
@@ -302,7 +494,7 @@ def main():
     if not os.path.exists(settings.RISK_GRID_GEOJSON):
         raise FileNotFoundError(
             f"St. Louis risk grid not found: {settings.RISK_GRID_GEOJSON}. "
-            "Run St Louis/make_map.py first."
+            "Run make_map.py first."
         )
 
     html = HTML_TEMPLATE.format(
@@ -316,6 +508,7 @@ def main():
         cell_size_m=settings.CELL_SIZE_M,
         locations=json.dumps(settings.LOCATIONS),
         labels=json.dumps(LOCATION_LABELS),
+        airspace_sites=json.dumps(settings.AIRSPACE_SITES),
     )
 
     with open(settings.MAP_HTML, "w", encoding="utf-8") as output_file:

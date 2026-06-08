@@ -19,6 +19,43 @@ LOCATIONS = {
     "midamerica_st_louis_airport": (38.5451731, -89.8351856),
 }
 
+# Simplified low-altitude airspace assumptions
+AIRSPACE_SITES = [
+    {
+        "code": "STL",
+        "airport": "St. Louis Lambert International Airport",
+        "location": LOCATIONS["st_louis_lambert_airport"],
+        "airspace_type": "Class B",
+        "inner_radius": 6.0,
+        "inner_unit": "NM",
+        "outer_radius": 15.0,
+        "outer_unit": "NM",
+        "vertical_range": "surface to 4000 ft MSL",
+    },
+    {
+        "code": "CPS",
+        "airport": "St. Louis Downtown-Parks Airport",
+        "location": LOCATIONS["st_louis_downtown_airport"],
+        "airspace_type": "Class D",
+        "inner_radius": 3.475905,
+        "inner_unit": "NM",
+        "outer_radius": None,
+        "outer_unit": None,
+        "vertical_range": "surface to 2900 ft MSL",
+    },
+    {
+        "code": "BLV",
+        "airport": "Scott AFB / MidAmerica St. Louis Airport",
+        "location": LOCATIONS["midamerica_st_louis_airport"],
+        "airspace_type": "Class D",
+        "inner_radius": 4.257984,
+        "inner_unit": "NM",
+        "outer_radius": None,
+        "outer_unit": None,
+        "vertical_range": "surface to 3000 ft MSL",
+    },
+]
+
 # Source data
 POPULATION_SOURCES = [
     {
