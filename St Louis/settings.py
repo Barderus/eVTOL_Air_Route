@@ -2,12 +2,14 @@
 
 
 # Study area
-WEST = -90.839767
+WEST = -90.501400
 SOUTH = 38.432831
 EAST = -89.678330
-NORTH = 39.006940
+NORTH = 38.863100
 MAP_CENTER_LAT = 38.719886
 MAP_CENTER_LON = -90.259049
+TRAFFIC_MAP_CENTER_LAT = 38.719886
+TRAFFIC_MAP_CENTER_LON = -90.340000
 MAP_ZOOM = 10
 CELL_SIZE_M = 500
 
@@ -74,26 +76,82 @@ POPULATION_GEOJSON = "population/st_louis_population_density.geojson"
 # Generated outputs
 RISK_GRID_GEOJSON = "maps/st_louis_risk_grid.geojson"
 MAP_HTML = "maps/st_louis_map.html"
+TRAFFIC_MAP_HTML = "maps/st_louis_traffic_leaflet.html"
+ROUTE_MAP_HTML = "maps/st_louis_routes_map.html"
+ROUTE_ANALYSIS_CSV = "routes/output/st_louis_route_cost_analysis.csv"
+ROUTE_ANALYSIS_FOLDER = "routes/analysis"
 TRAFFIC_FOLDER = "traffic/output"
 ROUTE_GEOJSON_FOLDER = "routes/output"
 ROUTE_HTML_FOLDER = "maps"
 
 # Route endpoints
-START = None
-DESTINATIONS = []
+ROUTES = [
+    {
+        "label": "MidAmerica to Downtown St. Louis",
+        "start_label": "MidAmerica St. Louis Airport",
+        "start": LOCATIONS["midamerica_st_louis_airport"],
+        "destination_label": "Downtown St. Louis",
+        "destination": LOCATIONS["st_louis_downtown"],
+    },
+    {
+        "label": "MidAmerica to St. Louis Lambert",
+        "start_label": "MidAmerica St. Louis Airport",
+        "start": LOCATIONS["midamerica_st_louis_airport"],
+        "destination_label": "St. Louis Lambert International Airport",
+        "destination": LOCATIONS["st_louis_lambert_airport"],
+    },
+    {
+        "label": "St. Louis Downtown Airport to St. Louis Lambert",
+        "start_label": "St. Louis Downtown Airport",
+        "start": LOCATIONS["st_louis_downtown_airport"],
+        "destination_label": "St. Louis Lambert International Airport",
+        "destination": LOCATIONS["st_louis_lambert_airport"],
+    },
+]
 
 # Traffic datasets used during routing
-TRAFFIC_DATASETS = []
+TRAFFIC_DATASETS = [
+    {
+        "date": "2026-03-07",
+        "label": "March 7th - Saturday",
+        "filename": "st_louis_2026-03-07_1s_15nm_bbox.csv",
+    },
+    {
+        "date": "2026-03-09",
+        "label": "March 9th - Monday",
+        "filename": "st_louis_2026-03-09_1s_15nm_bbox.csv",
+    },
+    {
+        "date": "2026-01-10",
+        "label": "January 10th - Saturday",
+        "filename": "st_louis_2026-01-10_1s_15nm_bbox.csv",
+    },
+    {
+        "date": "2026-01-12",
+        "label": "January 12th - Monday",
+        "filename": "st_louis_2026-01-12_1s_15nm_bbox.csv",
+    },
+    {
+        "date": "2025-07-12",
+        "label": "July 12th - Saturday",
+        "filename": "st_louis_2025-07-12_1s_15nm_bbox.csv",
+    },
+    {
+        "date": "2025-07-14",
+        "label": "July 14th - Monday",
+        "filename": "st_louis_2025-07-14_1s_15nm_bbox.csv",
+    },
+]
 
 # OpenSky export settings
-TRAFFIC_CENTER_NAME = None
-TRAFFIC_CENTER_LAT = None
-TRAFFIC_CENTER_LON = None
+TRAFFIC_CENTER_NAME = "st_louis"
+TRAFFIC_CENTER_LAT = MAP_CENTER_LAT
+TRAFFIC_CENTER_LON = MAP_CENTER_LON
 TRAFFIC_RADIUS_NM = 15.0
-TRAFFIC_SOUTH = None
-TRAFFIC_NORTH = None
-TRAFFIC_WEST = None
-TRAFFIC_EAST = None
+TRAFFIC_SOUTH = SOUTH
+TRAFFIC_NORTH = NORTH
+TRAFFIC_WEST = WEST
+TRAFFIC_EAST = EAST
 LOCAL_TIMEZONE = "America/Chicago"
 
 # Route weights
@@ -126,9 +184,7 @@ def validate_traffic_settings():
 
 def validate_route_settings():
     """Check that routing inputs and endpoints are configured."""
-    if START is None:
-        raise ValueError("Set START in St Louis/settings.py before generating routes.")
-    if not DESTINATIONS:
-        raise ValueError("Add at least one destination in St Louis/settings.py.")
+    if not ROUTES:
+        raise ValueError("Add at least one route in St Louis/settings.py.")
     if not TRAFFIC_DATASETS:
         raise ValueError("Add at least one traffic dataset in St Louis/settings.py.")
