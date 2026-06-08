@@ -3,9 +3,21 @@
 __pycache__/
 *.pyc
 
-opensky/output/
-3D/output/
-images/visualizations/ohare_density_map.png
-geojson/il_blockgroups_population_density.geojson
-population/
-html/ohare_density_leaflet.html
+Chicago/opensky/output/
+Chicago/3D/output/
+St Louis/traffic/output/
+St Louis/routes/output/
+St Louis/maps/*.geojson
+St Louis/population/st_louis_population_density.geojson
+
+# Generated geospatial and analysis artifacts
+Chicago/geojson/*.geojson
+Chicago/graph/*.geojson
+Chicago/2D/combined_route_costs.csv
+Chicago/geojson/combined_route_costs.csv
+Chicago/Smoothing/*_costs.csv
+
+# Generated visualizations and local icon assets
+Chicago/images/**/*.png
+Chicago/images/icons/*.svg
+

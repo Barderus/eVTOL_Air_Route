@@ -8,16 +8,6 @@ This folder contains:
 - `tl_2025_29_bg/`
   - 2025 TIGER/Line Missouri block-group boundaries
   - source: [U.S. Census Bureau TIGER/Line shapefiles](https://www.census.gov/cgi-bin/geo/shapefiles/index.php)
-
-Run the population processor from the project root:
-
-```powershell
-uv run python "St Louis/build_population.py"
-```
-
-The script joins the ACS `GEO_ID` to the TIGER/Line `GEOID`, calculates people
-per square kilometer of land, and assigns low, medium, and high density-risk
-bands using the 70th and 90th percentile thresholds.
-
-The processed population-density GeoJSON is generated and should not be
-committed.
+- Illinois population coverage comes from `Chicago/population/`:
+  - `population_data.csv`
+  - `tl_2025_17_bg/`

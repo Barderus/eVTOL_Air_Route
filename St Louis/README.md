@@ -6,9 +6,9 @@ This folder contains the St. Louis-specific version of the eVTOL routing
 project. It is separate from the Chicago scripts so both city workflows can be
 developed without editing the same files.
 
-The St. Louis workflow now includes Missouri block-group population
-preprocessing and configured study bounds. Route endpoints and airspace rules
-still need to be configured.
+The St. Louis workflow now includes Missouri and Illinois block-group
+population preprocessing, configured study bounds, and a simplified radial
+airport airspace model. Route endpoints still need to be configured.
 
 ## Study Area
 
@@ -24,50 +24,39 @@ The rectangular study bounds use these reference locations:
 The map center is the midpoint of the rectangular bounds at latitude
 38.667664 and longitude -90.259049.
 
-## Folder Layout
+## Airspace Model
 
-- `settings.py`
-  - editable study area, paths, endpoints, traffic settings, and route weights
-- `population/`
-  - source population data and generated population-density GeoJSON
-- `maps/`
-  - generated risk-grid GeoJSON and tracked HTML maps
-- `traffic/`
-  - OpenSky SQL and ignored CSV exports
-- `routes/`
-  - ignored route GeoJSON outputs
-- `build_population.py`
-  - population preprocessing entry point
-- `make_map.py`
-  - risk-grid and map-data entry point
-- `render_map.py`
-  - shared HTML renderer that always includes downtown and airport landmarks
-- `export_traffic.py`
-  - OpenSky export entry point
-- `astar_routes.py`
-  - standalone A* route generator
+The current grid uses simplified radial airspace assumptions:
 
-## How To Set It Up
+| Code | Airport | Type | Core | Second shelf | Vertical range |
+| --- | --- | --- | ---: | ---: | --- |
+| STL | St. Louis Lambert International Airport | Class B | 6 NM | 15 NM | Surface to 4000 ft MSL |
+| CPS | St. Louis Downtown-Parks Airport | Class D | 3.475905 NM | None | Surface to 2900 ft MSL |
+| BLV | Scott AFB / MidAmerica St. Louis Airport | Class D | 4.257984 NM | None | Surface to 3000 ft MSL |
 
-1. Run `build_population.py` to prepare the population-density GeoJSON.
-2. Fill in the study area, endpoints, datasets, and traffic settings.
-3. Add verified St. Louis airport and controlled-airspace assumptions to
-   `make_map.py`.
-4. Set `TRINO_USER` and update `TRINO_JAR` in `export_traffic.py`.
+The STL core is high risk and its second shelf is medium risk. The CPS and BLV
+cores are high risk. All configured airspace distances use nautical miles.
 
 ## How To Run It
 
-Run each script from the project root:
+Set the working directory to the `St Louis` folder. Run each script
+from that folder so the editable paths in `settings.py` resolve consistently:
 
 ```powershell
-uv run python "St Louis/build_population.py"
-uv run python "St Louis/make_map.py"
-uv run python "St Louis/render_map.py"
-uv run python "St Louis/export_traffic.py"
-uv run python "St Louis/astar_routes.py"
+cd "St Louis"
+uv run python build_population.py
+uv run python make_map.py
+uv run python render_map.py
 ```
 
-Scripts that still require St. Louis configuration stop with a clear message.
+After traffic and route settings are filled in, run:
+
+```powershell
+uv run python export_traffic.py
+uv run python astar_routes.py
+```
+
+Scripts that still require configuration stop with a clear message.
 The HTML renderer adds these locations to every St. Louis map:
 
 - Downtown St. Louis
@@ -79,8 +68,7 @@ Generated traffic CSV, route GeoJSON, risk-grid GeoJSON, and processed
 population files are ignored. Source population data and HTML maps can be
 tracked.
 
-## Future Improvements
+Population risk thresholds are calculated from block groups that intersect the
+configured study area. Low, medium, and high classes use the 70th and 90th
+percentile density thresholds for that local subset.
 
-- Implement the St. Louis airspace risk model.
-- Add route endpoints and traffic datasets.
-- Add a simple tracked HTML route map.

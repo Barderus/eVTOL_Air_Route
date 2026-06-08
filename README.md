@@ -55,10 +55,10 @@ The combined A* weights are:
 
 St. Louis has separate files for:
 
-- population preprocessing
-- risk-grid and map development
-- OpenSky traffic export
-- A* route generation
+- Missouri and Illinois population preprocessing
+- population and radial-airspace risk-grid development
+- OpenSky traffic export [TBD]
+- A* route generation [TBD]
 
 ## How To Set It Up
 
@@ -88,9 +88,9 @@ OpenSky exports also require:
 
 ## How To Run It
 
-Run commands from the repository root.
-
 ### Chicago
+
+Run Chicago commands from the repository root.
 
 Build the risk grid:
 
@@ -124,11 +124,6 @@ Tracked Chicago HTML maps are stored in `Chicago/html/`.
 
 - TBD
 
-
-## Future Improvements
-
-- Complete the St. Louis population and airspace risk layers.
-- Add verified St. Louis endpoints and OpenSky query bounds.
-- Add a tracked St. Louis HTML route map.
+### Future Improvements
 - Add more focused tests for Chicago routing and smoothing calculations.
 - Remove old Chicago experiments when they are no longer useful.
