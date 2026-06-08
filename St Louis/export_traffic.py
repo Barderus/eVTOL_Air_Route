@@ -10,11 +10,18 @@ from zoneinfo import ZoneInfo
 import settings
 
 
-EXPORT_DATE = "2026-01-01"
+EXPORT_DATES = [
+    "2026-03-07",
+    "2026-03-09",
+    "2026-01-10",
+    "2026-01-12",
+    "2025-07-12",
+    "2025-07-14",
+]
 SAMPLE_SECONDS = 1
 ALTITUDE_MAX_FT = 32808.4
 TRINO_USER = os.environ.get("TRINO_USER")
-TRINO_JAR = r"C:\path\to\trino-cli.jar"
+TRINO_JAR = r"C:\Users\Barderus_Legion\Downloads\trino-cli-480.jar"
 TRINO_SERVER = "https://trino.opensky-network.org"
 TRINO_CATALOG = "minio"
 TRINO_SCHEMA = "osky"
@@ -24,10 +31,10 @@ NM_TO_KM = 1.852
 FEET_TO_METERS = 0.3048
 
 
-def get_day_window():
+def get_day_window(export_date):
     """Return the configured local day as UTC epoch seconds."""
     timezone = ZoneInfo(settings.LOCAL_TIMEZONE)
-    day_start = datetime.strptime(EXPORT_DATE, "%Y-%m-%d").replace(tzinfo=timezone)
+    day_start = datetime.strptime(export_date, "%Y-%m-%d").replace(tzinfo=timezone)
     day_end = day_start + timedelta(days=1)
     return int(day_start.timestamp()), int(day_end.timestamp())
 
@@ -66,9 +73,9 @@ def get_bounding_box():
     return south, north, west, east
 
 
-def build_query():
+def build_query(export_date):
     """Fill the St. Louis SQL template with the configured values."""
-    start_epoch, end_epoch = get_day_window()
+    start_epoch, end_epoch = get_day_window(export_date)
     start_hour, end_hour = get_hour_window(start_epoch, end_epoch)
     south, north, west, east = get_bounding_box()
 
@@ -97,38 +104,53 @@ def main():
     if not os.path.isfile(TRINO_JAR):
         raise FileNotFoundError(f"Trino CLI JAR not found: {TRINO_JAR}")
 
-    query = build_query()
-    command = [
-        "java",
-        "-jar",
-        TRINO_JAR,
-        "--server",
-        TRINO_SERVER,
-        "--catalog",
-        TRINO_CATALOG,
-        "--schema",
-        TRINO_SCHEMA,
-        "--external-authentication",
-        "--user",
-        TRINO_USER,
-        "--output-format",
-        "CSV_HEADER",
-        "--execute",
-        query,
-    ]
-
-    result = subprocess.run(command, check=True, capture_output=True, text=True)
     os.makedirs(settings.TRAFFIC_FOLDER, exist_ok=True)
-    output_name = (
-        f"{settings.TRAFFIC_CENTER_NAME}_{EXPORT_DATE}_"
-        f"{SAMPLE_SECONDS}s_{int(settings.TRAFFIC_RADIUS_NM)}nm_bbox.csv"
-    )
-    output_path = os.path.join(settings.TRAFFIC_FOLDER, output_name)
 
-    with open(output_path, "w", encoding="utf-8") as output_file:
-        output_file.write(result.stdout)
+    for export_date in EXPORT_DATES:
+        try:
+            datetime.strptime(export_date, "%Y-%m-%d")
+        except ValueError as error:
+            raise ValueError(
+                f"Export date must use YYYY-MM-DD format: {export_date}"
+            ) from error
 
-    print(f"Saved traffic data: {output_path}")
+        output_name = (
+            f"{settings.TRAFFIC_CENTER_NAME}_{export_date}_"
+            f"{SAMPLE_SECONDS}s_{int(settings.TRAFFIC_RADIUS_NM)}nm_bbox.csv"
+        )
+        output_path = os.path.join(settings.TRAFFIC_FOLDER, output_name)
+
+        if os.path.isfile(output_path):
+            print(f"Skipping existing traffic data: {output_path}")
+            continue
+
+        query = build_query(export_date)
+        command = [
+            "java",
+            "-jar",
+            TRINO_JAR,
+            "--server",
+            TRINO_SERVER,
+            "--catalog",
+            TRINO_CATALOG,
+            "--schema",
+            TRINO_SCHEMA,
+            "--external-authentication",
+            "--user",
+            TRINO_USER,
+            "--output-format",
+            "CSV_HEADER",
+            "--execute",
+            query,
+        ]
+
+        print(f"Exporting OpenSky traffic for {export_date}...")
+        result = subprocess.run(command, check=True, capture_output=True, text=True)
+
+        with open(output_path, "w", encoding="utf-8") as output_file:
+            output_file.write(result.stdout)
+
+        print(f"Saved traffic data: {output_path}")
 
 
 if __name__ == "__main__":
