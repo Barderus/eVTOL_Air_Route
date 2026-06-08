@@ -1,9 +1,25 @@
+import os
+
 import geopandas as gpd
 import pandas as pd
 
+POPULATION_FOLDER = os.path.dirname(__file__)
+SHAPEFILE_PATH = os.path.join(
+    POPULATION_FOLDER,
+    "tl_2025_17_bg",
+    "tl_2025_17_bg.shp",
+)
+POPULATION_PATH = os.path.join(POPULATION_FOLDER, "population_data.xlsx")
+OUTPUT_PATH = os.path.join(
+    POPULATION_FOLDER,
+    "..",
+    "geojson",
+    "il_blockgroups_population_density.geojson",
+)
+
 # Load shapefile and population file
-gdf = gpd.read_file("../population/tl_2025_17_bg/tl_2025_17_bg.shp")
-density_df = pd.read_excel("../population/population_data.xlsx")
+gdf = gpd.read_file(SHAPEFILE_PATH)
+density_df = pd.read_excel(POPULATION_PATH)
 
 # Copy to avoid modifying original
 pop_df_clean = density_df.copy()
@@ -44,7 +60,6 @@ print(q_low, q_med)
 print(gdf_merged_crs["density_risk"].value_counts())
 
 # Save as GeoJSON for Leaflet
-out_geojson = "../geojson/il_blockgroups_population_density.geojson"
-gdf_merged_crs.to_file(out_geojson, driver="GeoJSON")
-print("Saved:", out_geojson)
+gdf_merged_crs.to_file(OUTPUT_PATH, driver="GeoJSON")
+print("Saved:", OUTPUT_PATH)
 
