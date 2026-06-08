@@ -18,11 +18,11 @@ The rectangular study bounds use these reference locations:
 | --- | --- | --- | ---: | ---: |
 | West | Wentzville | MO | 38.812962 | -90.839767 |
 | South | Arnold | MO | 38.432831 | -90.377619 |
-| North | Bethalto | IL | 38.902497 | -90.041333 |
+| North | Newbern | IL | 39.006940 | -90.336940 |
 | East | New Memphis | IL | 38.479170 | -89.678330 |
 
 The map center is the midpoint of the rectangular bounds at latitude
-38.667664 and longitude -90.259049.
+38.719886 and longitude -90.259049.
 
 ## Airspace Model
 
@@ -34,8 +34,10 @@ The current grid uses simplified radial airspace assumptions:
 | CPS | St. Louis Downtown-Parks Airport | Class D | 3.475905 NM | None | Surface to 2900 ft MSL |
 | BLV | Scott AFB / MidAmerica St. Louis Airport | Class D | 4.257984 NM | None | Surface to 3000 ft MSL |
 
-The STL core is high risk and its second shelf is medium risk. The CPS and BLV
-cores are high risk. All configured airspace distances use nautical miles.
+The STL first layer is a high-risk circle from the airport center through
+`6 NM`. Its second layer is a medium-risk ring greater than `6 NM` and through
+`15 NM`, excluding the core. The CPS and BLV cores are high risk. All
+configured airspace distances use nautical miles.
 
 ## How To Run It
 
@@ -71,4 +73,3 @@ tracked.
 Population risk thresholds are calculated from block groups that intersect the
 configured study area. Low, medium, and high classes use the 70th and 90th
 percentile density thresholds for that local subset.
-
