@@ -180,7 +180,7 @@
     const GRID_URL = "st_louis_risk_grid.geojson";
     const STUDY_BOUNDS = L.latLngBounds(
       [38.432831, -90.839767],
-      [38.902497, -89.67833]
+      [39.00694, -89.67833]
     );
     const locations = {"st_louis_downtown": [38.627003, -90.199402], "st_louis_downtown_airport": [38.5703611, -90.1550833], "st_louis_lambert_airport": [38.7486982, -90.3700257], "midamerica_st_louis_airport": [38.5451731, -89.8351856]};
     const labels = {"st_louis_downtown": "Downtown St. Louis", "st_louis_downtown_airport": "St. Louis Downtown Airport", "st_louis_lambert_airport": "St. Louis Lambert International Airport", "midamerica_st_louis_airport": "MidAmerica St. Louis Airport"};
@@ -200,7 +200,7 @@
 
     const statusEl = document.getElementById("status");
     const map = L.map("map", {
-      center: [38.667664, -90.259049],
+      center: [38.719886, -90.259049],
       zoom: 10,
       maxBounds: STUDY_BOUNDS.pad(0.04),
       maxBoundsViscosity: 0.9,
@@ -215,16 +215,25 @@
       attribution: "&copy; OpenStreetMap contributors &copy; CARTO"
     }).addTo(map);
 
+    const airportIcon = L.icon({
+      iconUrl: "../../Chicago/images/icons/airplane.svg",
+      iconSize: [26, 26],
+      iconAnchor: [13, 13],
+      popupAnchor: [0, -12]
+    });
+
+    const downtownIcon = L.icon({
+      iconUrl: "../../Chicago/images/icons/city.svg",
+      iconSize: [28, 28],
+      iconAnchor: [14, 14],
+      popupAnchor: [0, -12]
+    });
+
     const landmarkLayer = L.layerGroup(
       Object.entries(locations).map(([name, coordinates]) => {
         const isAirport = name.endsWith("airport");
-        return L.circleMarker(coordinates, {
-          radius: isAirport ? 7 : 6,
-          color: "#111827",
-          weight: 2,
-          fillColor: isAirport ? "#22c55e" : "#dc2626",
-          fillOpacity: 0.95
-        }).bindPopup(`<b>${labels[name]}</b>`);
+        const icon = isAirport ? airportIcon : downtownIcon;
+        return L.marker(coordinates, { icon }).bindPopup(`<b>${labels[name]}</b>`);
       })
     ).addTo(map);
 
@@ -237,11 +246,17 @@
       return [latitude + (radius / 111320), longitude];
     }
 
+    function radiusLabel(radius) {
+      return Number.isInteger(radius) ? radius.toFixed(0) : radius.toFixed(1);
+    }
+
     const airspaceRingLayer = L.layerGroup(
       airspaceSites.flatMap((site) => {
         const [latitude, longitude] = site.location;
         const rings = [{
-          label: `${site.code} ${site.inner_radius} ${site.inner_unit} core`,
+          label:
+            `${site.code} ${radiusLabel(site.inner_radius)} ` +
+            `${site.inner_unit}`,
           radius: radiusMeters(site.inner_radius, site.inner_unit),
           color: "#b30000",
           dashArray: "8 6"
@@ -249,7 +264,9 @@
 
         if (site.outer_radius !== null) {
           rings.push({
-            label: `${site.code} ${site.outer_radius} ${site.outer_unit} shelf`,
+            label:
+              `${site.code} ${radiusLabel(site.outer_radius)} ` +
+              `${site.outer_unit}`,
             radius: radiusMeters(site.outer_radius, site.outer_unit),
             color: "#f1c40f",
             dashArray: "14 7"
@@ -257,9 +274,8 @@
         }
 
         return rings.flatMap((ring) => {
-          const displayRadius = ring.radius + (CELL_SIZE_M / 2);
           const circle = L.circle([latitude, longitude], {
-            radius: displayRadius,
+            radius: ring.radius,
             color: ring.color,
             weight: 2.2,
             opacity: 0.95,
@@ -272,7 +288,7 @@
             `${site.vertical_range}`
           );
           const label = L.marker(
-            ringLabelLatLng(latitude, longitude, displayRadius),
+            ringLabelLatLng(latitude, longitude, ring.radius),
             {
               interactive: false,
               icon: L.divIcon({
