@@ -20,11 +20,19 @@ LOCATIONS = {
 }
 
 # Source data
-POPULATION_CSV = "St Louis/population/population_data.csv"
-BLOCK_GROUP_SHAPEFILE = (
-    "St Louis/population/tl_2025_29_bg/tl_2025_29_bg.shp"
-)
-POPULATION_GEOJSON = "St Louis/population/st_louis_population_density.geojson"
+POPULATION_SOURCES = [
+    {
+        "state": "MO",
+        "population_csv": "population/population_data.csv",
+        "block_group_shapefile": "population/tl_2025_29_bg/tl_2025_29_bg.shp",
+    },
+    {
+        "state": "IL",
+        "population_csv": "../Chicago/population/population_data.csv",
+        "block_group_shapefile": "../Chicago/population/tl_2025_17_bg/tl_2025_17_bg.shp",
+    },
+]
+POPULATION_GEOJSON = "population/st_louis_population_density.geojson"
 
 # Generated outputs
 RISK_GRID_GEOJSON = "St Louis/maps/st_louis_risk_grid.geojson"
