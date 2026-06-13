@@ -12,13 +12,36 @@ from shapely.geometry import LineString, Point
 import settings
 
 
-def normalize(values):
-    """Scale numeric values to the 0 to 1 range."""
+def normalize(
+    values,
+    clip_percentile=None,
+    transform=None,
+    power=1.0,
+):
+    """Scale non-negative values to the 0 to 1 range."""
     values = np.asarray(values, dtype=float)
-    maximum = float(np.nanmax(values))
-    if maximum <= 0:
+    values = np.clip(values, 0.0, None)
+
+    if transform == "log1p":
+        values = np.log1p(values)
+    elif transform is not None:
+        raise ValueError(f"Unsupported transform: {transform}")
+
+    if clip_percentile is None:
+        scale = float(np.max(values))
+    else:
+        positive_values = values[values > 0]
+        if positive_values.size == 0:
+            return np.zeros_like(values)
+        scale = float(np.percentile(positive_values, clip_percentile))
+
+    if scale <= 0:
         return np.zeros_like(values)
-    return np.clip(values / maximum, 0.0, 1.0)
+
+    normalized_values = np.clip(values / scale, 0.0, 1.0)
+    if power != 1.0:
+        normalized_values = np.power(normalized_values, power)
+    return normalized_values
 
 
 def build_graph(grid):
@@ -230,7 +253,13 @@ def main():
         if not os.path.exists(csv_path):
             raise FileNotFoundError(f"Traffic file not found: {csv_path}")
 
-        traffic_risk = normalize(load_traffic_counts(csv_path, grid))
+        traffic_counts = load_traffic_counts(csv_path, grid)
+        traffic_risk = normalize(
+            traffic_counts,
+            clip_percentile=95.0,
+            transform="log1p",
+            power=0.75,
+        )
         maximum_distance = add_edge_weights(
             graph,
             centroid_x,
