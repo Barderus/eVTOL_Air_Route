@@ -57,8 +57,10 @@ St. Louis has separate files for:
 
 - Missouri and Illinois population preprocessing
 - population and radial-airspace risk-grid development
-- OpenSky traffic export [TBD]
-- A* route generation [TBD]
+- OpenSky traffic export and interactive traffic-density maps
+- Combined-cost A* route generation and cost analysis
+- single-factor route comparisons
+- 24-hour traffic-density and route overlays
 
 ## How To Set It Up
 
@@ -122,7 +124,46 @@ Tracked Chicago HTML maps are stored in `Chicago/html/`.
 
 ### St. Louis
 
-- TBD
+Run St. Louis commands from the `St Louis` folder:
+
+```powershell
+cd "St Louis"
+```
+
+Build the population layer and risk grid:
+
+```powershell
+uv run python build_population.py
+uv run python make_map.py
+uv run python render_map.py
+```
+
+Generate the traffic map and combined-cost routes:
+
+```powershell
+uv run python make_traffic_map.py
+uv run python astar_routes.py
+uv run python make_route_map.py
+uv run python make_route_cost_pies.py
+```
+
+Generate one single-factor comparison page per route pair:
+
+```powershell
+uv run python generate_astar_toggle_pages.py
+```
+
+Overlay the route comparisons on the full 24-hour traffic density:
+
+```powershell
+uv run python make_route_traffic_map.py
+```
+
+The overlay is written to:
+
+```text
+St Louis/maps/st_louis_routes_24h_traffic.html
+```
 
 ### Future Improvements
 - Add more focused tests for Chicago routing and smoothing calculations.

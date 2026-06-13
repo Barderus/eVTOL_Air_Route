@@ -8,7 +8,9 @@ developed without editing the same files.
 
 The St. Louis workflow now includes Missouri and Illinois block-group
 population preprocessing, configured study bounds, and a simplified radial
-airport airspace model. Route endpoints still need to be configured.
+airport airspace model. It also includes OpenSky traffic maps, three configured
+route pairs, route-cost analysis, single-factor comparisons, and a 24-hour
+traffic-density route overlay.
 
 ## Study Area
 
@@ -16,13 +18,10 @@ The rectangular study bounds use these reference locations:
 
 | Boundary | Place | State | Latitude | Longitude |
 | --- | --- | --- | ---: | ---: |
-| West | Wentzville | MO | 38.812962 | -90.839767 |
+| West | Lindenwood University | MO | 38.787800 | -90.501400 |
 | South | Arnold | MO | 38.432831 | -90.377619 |
-| North | Newbern | IL | 39.006940 | -90.336940 |
+| North | Wood River | IL | 38.863100 | -90.088600 |
 | East | New Memphis | IL | 38.479170 | -89.678330 |
-
-The map center is the midpoint of the rectangular bounds at latitude
-38.719886 and longitude -90.259049.
 
 ## Airspace Model
 
@@ -44,19 +43,32 @@ configured airspace distances use nautical miles.
 Set the working directory to the `St Louis` folder. Run each script
 from that folder so the editable paths in `settings.py` resolve consistently:
 
-```powershell
-cd "St Louis"
-uv run python build_population.py
-uv run python make_map.py
-uv run python render_map.py
+The configured route pairs are:
+
+- MidAmerica St. Louis Airport to St. Louis Union Station
+- MidAmerica St. Louis Airport to St. Louis Lambert International Airport
+- St. Louis Downtown Airport to St. Louis Lambert International Airport
+
+Generate each route for every configured traffic date.
+
+Each page compares the configured combined route with distance-only,
+population-only, airspace-only, and air-traffic-only routes for every traffic
+date. The generated pages are:
+
+```text
+maps/midamerica_to_union_station_astar.html
+maps/midamerica_to_lambert_astar.html
+maps/downtown_airport_to_lambert_astar.html
 ```
 
-After traffic and route settings are filled in, run:
+In `maps/st_louis_routes_24h_traffic.html`. The page includes traffic
+date, route-pair, and route-weighting controls, with no shorter-hour controls.
+It embeds the 24-hour density layer only, keeping it substantially smaller than
+the full traffic page with sampled flight tracks.
 
-```powershell
-uv run python export_traffic.py
-uv run python astar_routes.py
-```
+Route cost totals and distance, population, airspace, and traffic percentages
+are saved to `routes/output/st_louis_route_cost_analysis.csv`. Pie charts for
+each traffic date are saved in `routes/analysis/`.
 
 Scripts that still require configuration stop with a clear message.
 The HTML renderer adds these locations to every St. Louis map:
