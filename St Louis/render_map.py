@@ -495,7 +495,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
 
 LOCATION_LABELS = {
-    "st_louis_downtown": "Downtown St. Louis",
+    "st_louis_union_station": "St. Louis Union Station",
     "st_louis_downtown_airport": "St. Louis Downtown Airport",
     "st_louis_lambert_airport": "St. Louis Lambert International Airport",
     "midamerica_st_louis_airport": "MidAmerica St. Louis Airport",

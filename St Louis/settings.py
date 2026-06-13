@@ -15,7 +15,7 @@ CELL_SIZE_M = 500
 
 # Required map landmarks
 LOCATIONS = {
-    "st_louis_downtown": (38.627003, -90.199402),
+    "st_louis_union_station": (38.629167, -90.207500),
     "st_louis_downtown_airport": (38.5703611, -90.1550833),
     "st_louis_lambert_airport": (38.7486982, -90.3700257),
     "midamerica_st_louis_airport": (38.5451731, -89.8351856),
@@ -87,11 +87,11 @@ ROUTE_HTML_FOLDER = "maps"
 # Route endpoints
 ROUTES = [
     {
-        "label": "MidAmerica to Downtown St. Louis",
+        "label": "MidAmerica to St. Louis Union Station",
         "start_label": "MidAmerica St. Louis Airport",
         "start": LOCATIONS["midamerica_st_louis_airport"],
-        "destination_label": "Downtown St. Louis",
-        "destination": LOCATIONS["st_louis_downtown"],
+        "destination_label": "St. Louis Union Station",
+        "destination": LOCATIONS["st_louis_union_station"],
     },
     {
         "label": "MidAmerica to St. Louis Lambert",

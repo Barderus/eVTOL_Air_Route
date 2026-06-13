@@ -15,8 +15,8 @@ ROUTE_GEOJSON_PATH = os.path.join(
 OUTPUT_PATH = settings.ROUTE_MAP_HTML
 
 ROUTE_STYLES = {
-    "MidAmerica to Downtown St. Louis": {
-        "short_label": "MidAmerica to Downtown",
+    "MidAmerica to St. Louis Union Station": {
+        "short_label": "MidAmerica to Union Station",
         "color": "#dc2626",
     },
     "MidAmerica to St. Louis Lambert": {
