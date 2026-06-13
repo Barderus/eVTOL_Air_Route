@@ -1,0 +1,861 @@
+from __future__ import annotations
+
+"""Build St. Louis multi-date, single-factor route comparison pages.
+
+This script precomputes A* routes for every configured endpoint pair, traffic
+dataset, and route-weight preset. It writes one GeoJSON and one self-contained
+Leaflet HTML page per endpoint pair.
+"""
+
+import json
+import math
+from pathlib import Path
+
+import geopandas as gpd
+import networkx as nx
+import numpy as np
+import pandas as pd
+from shapely.geometry import LineString, Point
+
+import settings
+
+ROOT = Path(__file__).resolve().parent
+GRID_PATH = ROOT / settings.RISK_GRID_GEOJSON
+TRAFFIC_OUTPUT = ROOT / settings.TRAFFIC_FOLDER
+GEOJSON_OUTPUT = ROOT / settings.ROUTE_GEOJSON_FOLDER
+HTML_OUTPUT = ROOT / settings.ROUTE_HTML_FOLDER
+
+DISTANCE_WEIGHT = settings.DISTANCE_WEIGHT
+POPULATION_WEIGHT = settings.POPULATION_WEIGHT
+AIRSPACE_WEIGHT = settings.AIRSPACE_WEIGHT
+TRAFFIC_WEIGHT = settings.TRAFFIC_WEIGHT
+
+# These specs drive both the A* edge weighting and the layer metadata emitted
+# into the self-contained HTML pages.
+ROUTE_SPECS = [
+    {
+        "name": "combined",
+        "label": "Combined",
+        "distance_weight": DISTANCE_WEIGHT,
+        "population_weight": POPULATION_WEIGHT,
+        "airspace_weight": AIRSPACE_WEIGHT,
+        "traffic_weight": TRAFFIC_WEIGHT,
+        "color": "#dc2626",
+    },
+    {
+        "name": "airspace_only",
+        "label": "Airspace Only",
+        "distance_weight": 0.0,
+        "population_weight": 0.0,
+        "airspace_weight": 1.0,
+        "traffic_weight": 0.0,
+        "color": "#f59e0b",
+    },
+    {
+        "name": "population_only",
+        "label": "Population Only",
+        "distance_weight": 0.0,
+        "population_weight": 1.0,
+        "airspace_weight": 0.0,
+        "traffic_weight": 0.0,
+        "color": "#2563eb",
+    },
+    {
+        "name": "distance_only",
+        "label": "Distance Only",
+        "distance_weight": 1.0,
+        "population_weight": 0.0,
+        "airspace_weight": 0.0,
+        "traffic_weight": 0.0,
+        "color": "#16a34a",
+    },
+    {
+        "name": "air_traffic_only",
+        "label": "Air Flight Density Only",
+        "distance_weight": 0.0,
+        "population_weight": 0.0,
+        "airspace_weight": 0.0,
+        "traffic_weight": 1.0,
+        "color": "#9333ea",
+    },
+]
+
+ROUTES = [
+    {
+        "slug": "midamerica_to_union_station",
+        "label": "MidAmerica To St. Louis Union Station",
+        "start": {
+            "label": "MidAmerica St. Louis Airport",
+            "lat": settings.LOCATIONS["midamerica_st_louis_airport"][0],
+            "lon": settings.LOCATIONS["midamerica_st_louis_airport"][1],
+        },
+        "destination": {
+            "label": "St. Louis Union Station",
+            "lat": settings.LOCATIONS["st_louis_union_station"][0],
+            "lon": settings.LOCATIONS["st_louis_union_station"][1],
+        },
+    },
+    {
+        "slug": "midamerica_to_lambert",
+        "label": "MidAmerica To St. Louis Lambert",
+        "start": {
+            "label": "MidAmerica St. Louis Airport",
+            "lat": settings.LOCATIONS["midamerica_st_louis_airport"][0],
+            "lon": settings.LOCATIONS["midamerica_st_louis_airport"][1],
+        },
+        "destination": {
+            "label": "St. Louis Lambert International Airport",
+            "lat": settings.LOCATIONS["st_louis_lambert_airport"][0],
+            "lon": settings.LOCATIONS["st_louis_lambert_airport"][1],
+        },
+    },
+    {
+        "slug": "downtown_airport_to_lambert",
+        "label": "St. Louis Downtown Airport To St. Louis Lambert",
+        "start": {
+            "label": "St. Louis Downtown Airport",
+            "lat": settings.LOCATIONS["st_louis_downtown_airport"][0],
+            "lon": settings.LOCATIONS["st_louis_downtown_airport"][1],
+        },
+        "destination": {
+            "label": "St. Louis Lambert International Airport",
+            "lat": settings.LOCATIONS["st_louis_lambert_airport"][0],
+            "lon": settings.LOCATIONS["st_louis_lambert_airport"][1],
+        },
+    },
+]
+
+DATASETS = [
+    {
+        "slug": dataset["date"],
+        "label": dataset["label"],
+        "csv_path": TRAFFIC_OUTPUT / dataset["filename"],
+    }
+    for dataset in settings.TRAFFIC_DATASETS
+]
+
+HTML_TEMPLATE = """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{page_title}</title>
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.6.0/dist/leaflet.css"
+    integrity="sha512-xwE/Az9zrjBIphAcBb3F6JVqxf46+CDLwfLMHloNu6KEQCAWi6HcDUbeOfBIptF7tcCzusKFjFw2yuvEpDL9wQ=="
+    crossorigin=""
+  />
+  <style>
+    :root {{
+      --surface: #ffffff;
+      --surface-soft: #f5f7f8;
+      --line: #cfd7dd;
+      --text: #172026;
+      --muted: #5f6f7a;
+      --active: #165a72;
+    }}
+
+    * {{ box-sizing: border-box; }}
+
+    html,
+    body {{
+      height: 100%;
+      margin: 0;
+      color: var(--text);
+      font-family: Arial, Helvetica, sans-serif;
+      overflow: hidden;
+    }}
+
+    body {{
+      display: flex;
+      flex-direction: column;
+      background: var(--surface-soft);
+    }}
+
+    .toolbar {{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--line);
+      background: var(--surface);
+      z-index: 1000;
+    }}
+
+    .title-block {{ min-width: 220px; }}
+
+    h1 {{
+      margin: 0;
+      font-size: 17px;
+      font-weight: 700;
+      line-height: 1.2;
+    }}
+
+    .status {{
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.25;
+      white-space: nowrap;
+    }}
+
+    .control-strip {{
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 10px;
+      flex-wrap: wrap;
+    }}
+
+    .segmented {{
+      display: inline-grid;
+      min-height: 38px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      overflow: hidden;
+      background: var(--surface);
+    }}
+
+    .route-toggle {{ grid-template-columns: repeat(5, minmax(96px, 1fr)); }}
+    .date-toggle {{ grid-template-columns: repeat(6, minmax(86px, 1fr)); }}
+
+    .segmented button {{
+      min-width: 0;
+      padding: 8px 12px;
+      border: 0;
+      border-right: 1px solid var(--line);
+      color: var(--text);
+      background: transparent;
+      font: inherit;
+      font-size: 13px;
+      cursor: pointer;
+    }}
+
+    .segmented button:last-child {{ border-right: 0; }}
+    .segmented button:hover {{ background: #eef3f5; }}
+    .segmented button.active {{ color: #ffffff; background: var(--active); }}
+
+    #map {{
+      flex: 1 1 auto;
+      width: 100%;
+      height: calc(100vh - 59px);
+      min-height: 360px;
+    }}
+
+    .legend-box {{
+      background: white;
+      padding: 10px 12px;
+      border-radius: 7px;
+      box-shadow: 0 6px 18px rgba(23, 32, 38, 0.14);
+      font-family: Arial, sans-serif;
+      font-size: 13px;
+      line-height: 1.4;
+    }}
+
+    .legend-row {{
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 4px 0;
+    }}
+
+    .swatch-line {{
+      width: 34px;
+      height: 0;
+      border-top: 4px solid #000;
+      display: inline-block;
+    }}
+
+    @media (max-width: 920px) {{
+      .toolbar {{ align-items: stretch; flex-direction: column; gap: 9px; }}
+      .status {{ white-space: normal; }}
+      .control-strip {{ justify-content: stretch; }}
+      .segmented {{ width: 100%; }}
+      .route-toggle {{ grid-template-columns: repeat(5, minmax(0, 1fr)); }}
+      .date-toggle {{ grid-template-columns: repeat(3, minmax(0, 1fr)); }}
+      .segmented button {{ padding-inline: 6px; font-size: 12px; }}
+      #map {{ height: calc(100vh - 151px); }}
+    }}
+  </style>
+</head>
+<body>
+  <header class="toolbar">
+    <div class="title-block">
+      <h1>{page_title}</h1>
+      <div id="status" class="status">Select a route mode and traffic date.</div>
+    </div>
+    <div class="control-strip">
+      <div class="segmented route-toggle" id="routeToggle" role="group" aria-label="Route mode"></div>
+      <div class="segmented date-toggle" id="dateToggle" role="group" aria-label="Traffic dataset"></div>
+    </div>
+  </header>
+  <main id="map" aria-label="{page_title} map"></main>
+
+  <script
+    src="https://unpkg.com/leaflet@1.6.0/dist/leaflet.js"
+    integrity="sha512-gZwIG9x3wUXg2hdXF6+rVkLF/0Vi9U8D2Ntg4Ga5I5BZpVkVxlJWbSQtXPSiUTtC0TjtGOmxa1AJPuV0CPthew=="
+    crossorigin=""
+  ></script>
+  <script>
+    const STUDY_BOUNDS = L.latLngBounds(
+      [{south}, {west}],
+      [{north}, {east}]
+    );
+    const map = L.map("map", {{
+      center: [{center_lat}, {center_lon}],
+      zoom: {zoom}
+    }});
+    const routeData = {route_data};
+    const datasetOrder = {dataset_order};
+    const startPoint = {start_point};
+    const destinationPoint = {destination_point};
+
+    L.tileLayer("https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png", {{
+      maxZoom: 19,
+      attribution: "&copy; OpenStreetMap contributors"
+    }}).addTo(map);
+
+    const startMarker = L.marker([startPoint.lat, startPoint.lon]).bindPopup(`<b>Start</b><br>${{startPoint.label}}`);
+    const destinationMarker = L.marker([destinationPoint.lat, destinationPoint.lon]).bindPopup(`<b>Destination</b><br>${{destinationPoint.label}}`);
+    startMarker.addTo(map);
+    destinationMarker.addTo(map);
+
+    const defaultRouteDefinitions = {route_definitions};
+    const availableRouteNames = new Set(
+      routeData.features.map((feature) => feature.properties?.route_name).filter(Boolean)
+    );
+    const routeDefinitions = defaultRouteDefinitions
+      .filter((routeDefinition) => availableRouteNames.has(routeDefinition.name))
+      .map((routeDefinition) => ({{ ...routeDefinition }}));
+    const activeRouteLayers = {{}};
+    // Index features by dataset slug and route name so a date switch only swaps
+    // the visible route geometry, not the whole map.
+    const datasetLayers = new Map();
+    const dateToggle = document.getElementById("dateToggle");
+    const routeToggle = document.getElementById("routeToggle");
+    const statusEl = document.getElementById("status");
+    let activeDatasetSlug = datasetOrder[0]?.slug || null;
+    let activeRouteNames = new Set(["combined"]);
+
+    function formatDatasetLabel(dateLabel) {{
+      if (/^(Sun|Mon|Tue|Wed|Thu|Fri|Sat)\\s/.test(dateLabel)) {{
+        return dateLabel;
+      }}
+
+      const parsedDate = new Date(`${{dateLabel}}T00:00:00`);
+      if (Number.isNaN(parsedDate.getTime())) {{
+        return dateLabel;
+      }}
+
+      return parsedDate.toLocaleDateString("en-US", {{
+        weekday: "short",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit"
+      }}).replace(/,\\s*/, " ");
+    }}
+
+    routeData.features.forEach((feature) => {{
+      const properties = feature.properties || {{}};
+      if (!datasetLayers.has(properties.dataset_slug)) {{
+        datasetLayers.set(properties.dataset_slug, {{}});
+      }}
+      datasetLayers.get(properties.dataset_slug)[properties.route_name] = feature;
+
+      const routeDefinition = routeDefinitions.find((item) => item.name === properties.route_name);
+      if (routeDefinition) {{
+        routeDefinition.label = properties.route_label || routeDefinition.label;
+        routeDefinition.color = properties.color || routeDefinition.color;
+      }}
+    }});
+
+    routeDefinitions.forEach((routeDefinition) => {{
+      const layer = L.geoJSON(null, {{
+        style: (feature) => {{
+        const p = feature.properties || {{}};
+        return {{
+          color: p.color || "#dc2626",
+          weight: 6,
+          opacity: 0.92
+        }};
+        }},
+        onEachFeature: (feature, routeLayer) => {{
+          const p = feature.properties || {{}};
+          routeLayer.bindPopup(
+            `<b>${{p.destination_label}}</b><br>` +
+            `<b>Route:</b> ${{p.route_label}}<br>` +
+            `<b>Dataset:</b> ${{formatDatasetLabel(p.dataset_label)}}<br>` +
+            `<b>Path nodes:</b> ${{p.path_nodes}}<br>` +
+            `<b>Total cost:</b> ${{Number(p.total_cost).toFixed(4)}}<br>` +
+            `<b>Weights:</b> D=${{p.distance_weight}}, P=${{p.population_weight}}, A=${{p.airspace_weight}}, T=${{p.traffic_weight}}`
+          );
+        }}
+      }});
+      activeRouteLayers[routeDefinition.name] = layer;
+    }});
+
+    function setActiveDateButton(activeSlug) {{
+      Array.from(dateToggle.querySelectorAll("button")).forEach((button) => {{
+        button.classList.toggle("active", button.dataset.slug === activeSlug);
+        button.setAttribute("aria-pressed", button.dataset.slug === activeSlug ? "true" : "false");
+      }});
+    }}
+
+    function showDataset(datasetSlug) {{
+      activeDatasetSlug = datasetSlug;
+      const routeLayerMap = datasetLayers.get(datasetSlug) || {{}};
+      Object.entries(activeRouteLayers).forEach(([routeName, layer]) => {{
+        const feature = routeLayerMap[routeName];
+        layer.clearLayers();
+        if (feature) {{
+          layer.addData(feature);
+        }}
+      }});
+
+      setActiveDateButton(datasetSlug);
+      syncVisibleRoutes();
+    }}
+
+    function syncVisibleRoutes() {{
+      const routeLayerMap = datasetLayers.get(activeDatasetSlug) || {{}};
+      Object.entries(activeRouteLayers).forEach(([name, layer]) => {{
+        if (activeRouteNames.has(name) && routeLayerMap[name] && layer.getLayers().length > 0) {{
+          layer.addTo(map);
+        }} else {{
+          map.removeLayer(layer);
+        }}
+      }});
+
+      Array.from(routeToggle.querySelectorAll("button")).forEach((button) => {{
+        const isActive = activeRouteNames.has(button.dataset.route);
+        button.classList.toggle("active", isActive);
+        button.setAttribute("aria-pressed", isActive ? "true" : "false");
+      }});
+
+      const activeDate = dateToggle.querySelector("button.active");
+      const activeLabels = routeDefinitions
+        .filter((item) => activeRouteNames.has(item.name) && routeLayerMap[item.name])
+        .map((item) => item.label);
+      if (statusEl && activeDate) {{
+        statusEl.textContent = activeLabels.length
+          ? activeLabels.join(", ") + " routes, " + activeDate.textContent + " traffic dataset"
+          : "No route data available for " + activeDate.textContent + " traffic dataset";
+      }}
+    }}
+
+    function toggleRoute(routeName) {{
+      if (activeRouteNames.has(routeName)) {{
+        if (activeRouteNames.size === 1) {{
+          return;
+        }}
+        activeRouteNames.delete(routeName);
+      }} else {{
+        activeRouteNames.add(routeName);
+      }}
+      syncVisibleRoutes();
+    }}
+
+    routeDefinitions.forEach((routeDefinition) => {{
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.route = routeDefinition.name;
+      button.textContent = routeDefinition.label;
+      button.setAttribute("aria-pressed", activeRouteNames.has(routeDefinition.name) ? "true" : "false");
+      button.addEventListener("click", () => toggleRoute(routeDefinition.name));
+      routeToggle.appendChild(button);
+    }});
+
+    datasetOrder.forEach((dataset) => {{
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.slug = dataset.slug;
+      button.textContent = formatDatasetLabel(dataset.label);
+      button.setAttribute("aria-pressed", "false");
+      button.addEventListener("click", () => showDataset(dataset.slug));
+      dateToggle.appendChild(button);
+    }});
+
+    const legend = L.control({{ position: "bottomright" }});
+    legend.onAdd = function () {{
+      const div = L.DomUtil.create("div", "legend-box");
+      const legendRows = routeDefinitions.map((routeDefinition) => `
+        <div class="legend-row">
+          <span class="swatch-line" style="border-top-color:${{routeDefinition.color}};"></span>
+          <span>${{routeDefinition.label}}</span>
+        </div>
+      `).join("");
+      div.innerHTML = `
+        <div style="font-weight:700; margin-bottom:6px;">{page_title}</div>
+        ${{legendRows}}
+      `;
+      return div;
+    }};
+    legend.addTo(map);
+
+    showDataset(datasetOrder[0].slug);
+  </script>
+</body>
+</html>
+"""
+
+
+def normalize(
+    values: np.ndarray,
+    *,
+    clip_percentile: float | None = None,
+    transform: str | None = None,
+    power: float = 1.0,
+) -> tuple[np.ndarray, float]:
+    """Scale a cost array into the 0-1 range for route weighting."""
+    array = np.asarray(values, dtype=float)
+    array = np.clip(array, 0.0, None)
+
+    if transform == "log1p":
+        array = np.log1p(array)
+    elif transform is not None:
+        raise ValueError(f"Unsupported transform: {transform}")
+
+    if clip_percentile is None:
+        maximum = float(np.max(array))
+        if maximum <= 0:
+            return np.zeros_like(array, dtype=float), 1.0
+        normalized = array / maximum
+        if power != 1.0:
+            normalized = np.power(normalized, power)
+        return normalized, maximum
+
+    positive = array[array > 0]
+    if positive.size == 0:
+        return np.zeros_like(array, dtype=float), 1.0
+
+    scale = float(np.percentile(positive, clip_percentile))
+    if scale <= 0:
+        scale = float(np.max(positive))
+    if scale <= 0:
+        return np.zeros_like(array, dtype=float), 1.0
+
+    normalized = np.clip(array / scale, 0.0, 1.0)
+    if power != 1.0:
+        normalized = np.power(normalized, power)
+    return normalized, scale
+
+
+def path_cost(graph: nx.Graph, path: list[int], weight: str) -> float:
+    """Return the summed edge cost for a path using one named weight field."""
+    return sum(graph[path[i]][path[i + 1]][weight] for i in range(len(path) - 1))
+
+
+def detect_csv_encoding(csv_path: Path) -> str:
+    """Handle the common BOM variants seen in exported CSV files."""
+    with csv_path.open("rb") as file_handle:
+        first_bytes = file_handle.read(4)
+
+    if first_bytes.startswith(b"\xff\xfe") or first_bytes.startswith(b"\xfe\xff"):
+        return "utf-16"
+    if first_bytes.startswith(b"\xef\xbb\xbf"):
+        return "utf-8-sig"
+    return "utf-8"
+
+
+def build_graph(grid: gpd.GeoDataFrame) -> tuple[nx.Graph, gpd.GeoSeries, np.ndarray, np.ndarray]:
+    """Turn the routing grid into a graph where touching cells are neighbors."""
+    graph = nx.Graph()
+    for index, row in grid.iterrows():
+        graph.add_node(
+            index,
+            risk_cost=float(row["risk_cost"]),
+            city_risk=float(row["city_risk"]),
+            airport_risk_combined=float(row["airport_risk_combined"]),
+            geometry=row.geometry,
+        )
+
+    sindex = grid.sindex
+    geoms = grid.geometry
+    for i, geom in enumerate(geoms):
+        for j in sindex.intersection(geom.bounds):
+            if j <= i:
+                continue
+            # `touches` keeps both edge-sharing and corner-sharing neighbors, so
+            # diagonal steps are legal moves in the routing graph.
+            if geom.touches(geoms.iloc[j]):
+                graph.add_edge(i, j)
+
+    grid_m = grid.to_crs("EPSG:3857")
+    centroids_m = grid_m.geometry.centroid
+    cent_x = centroids_m.x.to_numpy()
+    cent_y = centroids_m.y.to_numpy()
+    return graph, centroids_m, cent_x, cent_y
+
+
+def node_for_point(
+    lat: float,
+    lon: float,
+    sindex,
+    geoms: gpd.GeoSeries,
+    centroids_m: gpd.GeoSeries,
+) -> int:
+    """Map a lat/lon point onto the containing grid cell or nearest centroid."""
+    point = Point(lon, lat)
+    for index in sindex.intersection(point.bounds):
+        if geoms.iloc[index].contains(point):
+            return int(index)
+
+    # Origins and destinations can land on a cell boundary, so fall back to the
+    # nearest centroid instead of failing the route build.
+    point_m = gpd.GeoSeries([point], crs="EPSG:4326").to_crs("EPSG:3857").iloc[0]
+    return int(centroids_m.distance(point_m).idxmin())
+
+
+def make_heuristic(distance_weight: float, cent_x: np.ndarray, cent_y: np.ndarray, max_edge_distance: float):
+    """Build the admissible A* heuristic for one route specification."""
+    if distance_weight <= 0:
+        return lambda _u, _v: 0.0
+
+    def heuristic(u: int, v: int) -> float:
+        dx = cent_x[u] - cent_x[v]
+        dy = cent_y[u] - cent_y[v]
+        return distance_weight * (math.hypot(dx, dy) / max_edge_distance)
+
+    return heuristic
+
+
+def route_line(grid: gpd.GeoDataFrame, path: list[int], simplify_tolerance_m: float = 0.0) -> LineString:
+    """Render a node path as a centroid line, with optional simplification."""
+    line = LineString([grid.loc[node].geometry.centroid for node in path])
+    if simplify_tolerance_m <= 0:
+        return line
+
+    simplified = (
+        gpd.GeoSeries([line], crs=grid.crs)
+        .to_crs("EPSG:3857")
+        .simplify(simplify_tolerance_m, preserve_topology=False)
+        .to_crs(grid.crs)
+        .iloc[0]
+    )
+    if isinstance(simplified, LineString):
+        return simplified
+    return line
+
+
+def load_traffic_counts(csv_path: Path, grid: gpd.GeoDataFrame) -> np.ndarray:
+    """Convert raw OpenSky observations into per-cell counts for one dataset."""
+    data = pd.read_csv(csv_path, encoding=detect_csv_encoding(csv_path))
+    data = data.dropna(subset=["lat", "lon"]).copy()
+    data["lat"] = pd.to_numeric(data["lat"], errors="coerce")
+    data["lon"] = pd.to_numeric(data["lon"], errors="coerce")
+    data = data.dropna(subset=["lat", "lon"])
+
+    # Convert raw OpenSky observations into per-cell traffic counts for the
+    # dataset date represented by this route page.
+    observations = gpd.GeoDataFrame(
+        data[["lat", "lon"]].copy(),
+        geometry=gpd.points_from_xy(data["lon"], data["lat"]),
+        crs="EPSG:4326",
+    )
+    joined = gpd.sjoin(
+        observations,
+        grid[["geometry"]],
+        how="left",
+        predicate="within",
+    )
+    counts = joined["index_right"].value_counts().sort_index()
+    traffic_counts = np.zeros(len(grid), dtype=float)
+    valid_counts = counts[counts.index.notna()]
+    if not valid_counts.empty:
+        traffic_counts[valid_counts.index.astype(int)] = valid_counts.to_numpy(dtype=float)
+    return traffic_counts
+
+
+def assign_route_edge_weights(
+    graph: nx.Graph,
+    cent_x: np.ndarray,
+    cent_y: np.ndarray,
+    city_risk_norm: np.ndarray,
+    airspace_risk_norm: np.ndarray,
+    traffic_risk_norm: np.ndarray,
+) -> float:
+    """Project normalized cell costs onto graph edges for every route preset."""
+    neighbor_distances = []
+    for u, v in graph.edges():
+        dx = cent_x[u] - cent_x[v]
+        dy = cent_y[u] - cent_y[v]
+        neighbor_distances.append(math.hypot(dx, dy))
+
+    max_edge_distance = max(neighbor_distances)
+
+    for u, v in graph.edges():
+        dx = cent_x[u] - cent_x[v]
+        dy = cent_y[u] - cent_y[v]
+        distance_norm = math.hypot(dx, dy) / max_edge_distance
+        # Treat the edge as inheriting the average risk of the two cells it
+        # connects, which keeps node-based cost layers compatible with A*.
+        population_norm = 0.5 * (city_risk_norm[u] + city_risk_norm[v])
+        airspace_norm = 0.5 * (airspace_risk_norm[u] + airspace_risk_norm[v])
+        traffic_norm = 0.5 * (traffic_risk_norm[u] + traffic_risk_norm[v])
+        for spec in ROUTE_SPECS:
+            graph[u][v][f"weight_{spec['name']}"] = (
+                spec["distance_weight"] * distance_norm
+                + spec["population_weight"] * population_norm
+                + spec["airspace_weight"] * airspace_norm
+                + spec["traffic_weight"] * traffic_norm
+            )
+
+    return max_edge_distance
+
+
+def build_route_features() -> dict[str, gpd.GeoDataFrame]:
+    """Build every endpoint-pair/date/preset feature used by the HTML pages."""
+    grid = gpd.read_file(GRID_PATH).reset_index(drop=True)
+    graph, centroids_m, cent_x, cent_y = build_graph(grid)
+    sindex = grid.sindex
+    geoms = grid.geometry
+
+    city_risk = grid["city_risk"].to_numpy(dtype=float)
+    airspace_risk = grid["airport_risk_combined"].to_numpy(dtype=float)
+    city_risk_norm, _ = normalize(city_risk)
+    airspace_risk_norm, airspace_scale = normalize(airspace_risk, clip_percentile=99.0, power=0.75)
+
+    route_nodes = {
+        route["slug"]: (
+            node_for_point(
+                route["start"]["lat"],
+                route["start"]["lon"],
+                sindex,
+                geoms,
+                centroids_m,
+            ),
+            node_for_point(
+                route["destination"]["lat"],
+                route["destination"]["lon"],
+                sindex,
+                geoms,
+                centroids_m,
+            ),
+        )
+        for route in ROUTES
+    }
+
+    route_rows_by_pair: dict[str, list[dict[str, object]]] = {
+        route["slug"]: [] for route in ROUTES
+    }
+    route_geometries_by_pair: dict[str, list[LineString]] = {
+        route["slug"]: [] for route in ROUTES
+    }
+
+    # Precompute every destination/date/preset combination once so the HTML
+    # pages only need to toggle prebuilt route features.
+    for dataset in DATASETS:
+        if not dataset["csv_path"].exists():
+            raise SystemExit(f"Traffic CSV not found: {dataset['csv_path']}")
+
+        traffic_counts = load_traffic_counts(dataset["csv_path"], grid)
+        traffic_risk_norm, traffic_scale = normalize(
+            traffic_counts,
+            clip_percentile=95.0,
+            transform="log1p",
+            power=0.75,
+        )
+        max_edge_distance = assign_route_edge_weights(
+            graph,
+            cent_x,
+            cent_y,
+            city_risk_norm,
+            airspace_risk_norm,
+            traffic_risk_norm,
+        )
+        for route in ROUTES:
+            start_node, end_node = route_nodes[route["slug"]]
+            for spec in ROUTE_SPECS:
+                weight_key = f"weight_{spec['name']}"
+                heuristic = make_heuristic(spec["distance_weight"], cent_x, cent_y, max_edge_distance)
+                path = nx.astar_path(graph, start_node, end_node, heuristic=heuristic, weight=weight_key)
+                total_cost = path_cost(graph, path, weight_key)
+                route_rows_by_pair[route["slug"]].append(
+                    {
+                        "dataset_slug": dataset["slug"],
+                        "dataset_label": dataset["label"],
+                        "route_slug": route["slug"],
+                        "route_label_full": route["label"],
+                        "origin_label": route["start"]["label"],
+                        "destination_label": route["destination"]["label"],
+                        "route_name": spec["name"],
+                        "route_label": spec["label"],
+                        "path_nodes": len(path),
+                        "total_cost": total_cost,
+                        "distance_weight": spec["distance_weight"],
+                        "population_weight": spec["population_weight"],
+                        "airspace_weight": spec["airspace_weight"],
+                        "traffic_weight": spec["traffic_weight"],
+                        "traffic_scale": float(traffic_scale),
+                        "airspace_scale": float(airspace_scale),
+                        "algorithm": "astar",
+                        "color": spec["color"],
+                    }
+                )
+                geometry = route_line(grid, path)
+                route_geometries_by_pair[route["slug"]].append(geometry)
+                print(
+                    f"{route['slug']} | {dataset['slug']} | {spec['name']}:",
+                    f"nodes={len(path)}",
+                    f"cost={total_cost:.4f}",
+                    f"traffic_scale={traffic_scale:.4f}",
+                )
+
+    return {
+        route["slug"]: gpd.GeoDataFrame(
+            route_rows_by_pair[route["slug"]],
+            geometry=route_geometries_by_pair[route["slug"]],
+            crs=grid.crs,
+        )
+        for route in ROUTES
+    }
+
+
+def write_html(route: dict[str, object], route_geojson: dict[str, object]) -> None:
+    """Write one self-contained Leaflet page for an endpoint pair."""
+    page_title = f"{route['label']} A* Route"
+    output_path = HTML_OUTPUT / f"{route['slug']}_astar.html"
+    html = HTML_TEMPLATE.format(
+        page_title=page_title,
+        route_data=json.dumps(route_geojson),
+        dataset_order=json.dumps([{"slug": item["slug"], "label": item["label"]} for item in DATASETS]),
+        route_definitions=json.dumps(
+            [{"name": item["name"], "label": item["label"], "color": item["color"]} for item in ROUTE_SPECS]
+        ),
+        start_point=json.dumps(route["start"]),
+        destination_point=json.dumps(route["destination"]),
+        destination_label=route["destination"]["label"],
+        distance_weight=DISTANCE_WEIGHT,
+        population_weight=POPULATION_WEIGHT,
+        airspace_weight=AIRSPACE_WEIGHT,
+        traffic_weight=TRAFFIC_WEIGHT,
+        south=settings.SOUTH,
+        west=settings.WEST,
+        north=settings.NORTH,
+        east=settings.EAST,
+        center_lat=settings.MAP_CENTER_LAT,
+        center_lon=settings.MAP_CENTER_LON,
+        zoom=settings.MAP_ZOOM,
+    )
+    output_path.write_text(html, encoding="utf-8")
+    print(f"Saved HTML: {output_path}")
+
+
+def main() -> None:
+    """Generate all tracked route GeoJSON and HTML artifacts."""
+    HTML_OUTPUT.mkdir(parents=True, exist_ok=True)
+    GEOJSON_OUTPUT.mkdir(parents=True, exist_ok=True)
+    routes_by_pair = build_route_features()
+
+    for route in ROUTES:
+        route_gdf = routes_by_pair[route["slug"]]
+        geojson_path = GEOJSON_OUTPUT / f"{route['slug']}_astar_routes.geojson"
+        route_gdf.to_file(geojson_path, driver="GeoJSON")
+        print(f"Saved GeoJSON: {geojson_path}")
+        write_html(route, json.loads(route_gdf.to_json()))
+
+
+if __name__ == "__main__":
+    main()
