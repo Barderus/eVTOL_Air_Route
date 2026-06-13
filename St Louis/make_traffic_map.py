@@ -16,7 +16,7 @@ ARROW_STRIDE = 18
 OUTPUT_PATH = settings.TRAFFIC_MAP_HTML
 
 LOCATION_LABELS = {
-    "st_louis_downtown": "Downtown St. Louis",
+    "st_louis_union_station": "St. Louis Union Station",
     "st_louis_downtown_airport": "St. Louis Downtown Airport",
     "st_louis_lambert_airport": "St. Louis Lambert International Airport",
     "midamerica_st_louis_airport": "MidAmerica St. Louis Airport",
@@ -388,16 +388,18 @@ def lonlat_to_web_mercator(lon, lat):
     return x, y
 
 
-def build_windowed_heatmap(data):
+def build_windowed_heatmap(data, time_windows=None):
     start_epoch = int(data["time"].min())
     windowed = {}
+    if time_windows is None:
+        time_windows = TIME_WINDOWS
     south, west = settings.SOUTH, settings.WEST
     xmin, ymin = lonlat_to_web_mercator(np.array([west]), np.array([south]))
     xmin = float(xmin[0])
     ymin = float(ymin[0])
     # Align to the same projected grid used by make_grid.py.
 
-    for hours in TIME_WINDOWS:
+    for hours in time_windows:
         cutoff = start_epoch + hours * 3600
         rows = data[data["time"] < cutoff][["lat", "lon", "icao24"]].copy()
         if rows.empty:
