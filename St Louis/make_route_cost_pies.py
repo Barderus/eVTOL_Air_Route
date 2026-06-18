@@ -1,7 +1,6 @@
-"""Create route cost breakdown pie charts from the analysis CSV."""
+"""Create average route cost breakdown pie charts from the analysis CSV."""
 
 import os
-import re
 
 import matplotlib
 
@@ -20,13 +19,6 @@ COMPONENTS = [
 ]
 
 
-def clean_filename(value):
-    """Convert a label into a simple filename."""
-    filename = value.lower()
-    filename = re.sub(r"[^a-z0-9]+", "_", filename)
-    return filename.strip("_")
-
-
 def percentage_label(percent):
     """Show percentages large enough to read on the pie chart."""
     if percent < 1.0:
@@ -34,15 +26,31 @@ def percentage_label(percent):
     return f"{percent:.1f}%"
 
 
-def make_date_chart(date_rows):
-    """Create one figure containing the three route breakdowns for a date."""
-    dataset_label = date_rows.iloc[0]["dataset"]
-    figure, axes = plt.subplots(1, len(date_rows), figsize=(17, 6))
+def average_route_costs(analysis):
+    """Average every cost component across the available dates by route."""
+    cost_columns = [column for _, column, _ in COMPONENTS]
+    average_columns = ["route_distance_km", "total_cost", *cost_columns]
+    averages = (
+        analysis.groupby("route", sort=False)[average_columns]
+        .mean()
+        .reset_index()
+    )
+    averages["calculated_total_cost"] = averages[cost_columns].sum(axis=1)
+    return averages
 
-    if len(date_rows) == 1:
+
+def make_average_chart(route_averages, date_count):
+    """Create one figure containing the average breakdown for every route."""
+    figure, axes = plt.subplots(
+        1,
+        len(route_averages),
+        figsize=(17, 6),
+    )
+
+    if len(route_averages) == 1:
         axes = [axes]
 
-    for axis, row in zip(axes, date_rows.itertuples(index=False)):
+    for axis, row in zip(axes, route_averages.itertuples(index=False)):
         values = [getattr(row, column) for _, column, _ in COMPONENTS]
         labels = [name for name, _, _ in COMPONENTS]
         colors = [color for _, _, color in COMPONENTS]
@@ -59,24 +67,25 @@ def make_date_chart(date_rows):
         )
         axis.set_title(
             f"{row.route}\n"
-            f"Total cost: {row.total_cost:.3f} | "
-            f"Distance: {row.route_distance_km:.2f} km",
+            f"Average total cost: {row.calculated_total_cost:.3f} | "
+            f"Average distance: {row.route_distance_km:.2f} km",
             fontsize=11,
             pad=14,
         )
         axis.set_aspect("equal")
 
     figure.suptitle(
-        f"St. Louis Route Cost Breakdown\n{dataset_label}",
+        f"St. Louis Average Route Cost Breakdown\n"
+        f"Average of {date_count} traffic dates",
         fontsize=16,
     )
     figure.tight_layout(rect=(0, 0, 1, 0.9))
 
-    output_name = f"route_cost_breakdown_{clean_filename(dataset_label)}.png"
+    output_name = "route_cost_breakdown_average.png"
     output_path = os.path.join(settings.ROUTE_ANALYSIS_FOLDER, output_name)
     figure.savefig(output_path, dpi=220, bbox_inches="tight")
     plt.close(figure)
-    print(f"Saved route cost chart: {output_path}")
+    print(f"Saved average route cost chart: {output_path}")
 
 
 def main():
@@ -88,11 +97,9 @@ def main():
 
     analysis = pd.read_csv(settings.ROUTE_ANALYSIS_CSV)
     os.makedirs(settings.ROUTE_ANALYSIS_FOLDER, exist_ok=True)
-
-    for dataset in settings.TRAFFIC_DATASETS:
-        date_rows = analysis[analysis["date"] == dataset["date"]].copy()
-        date_rows = date_rows.reset_index(drop=True)
-        make_date_chart(date_rows)
+    date_count = analysis["date"].nunique()
+    route_averages = average_route_costs(analysis)
+    make_average_chart(route_averages, date_count)
 
 
 if __name__ == "__main__":

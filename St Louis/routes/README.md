@@ -54,31 +54,44 @@ zero. The route generator and cost analysis use the same normalized values.
 
 ## Current Results
 
-The following table summarizes the average cost distribution across the six
-traffic dates:
+The total weighted cost for each route and traffic date is:
+
+| Route | 2025-07-12 | 2025-07-14 | 2026-01-10 | 2026-01-12 | 2026-03-07 | 2026-03-09 | Average cost | Average distance |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| MidAmerica to St. Louis Union Station | 97.475 | 84.416 | 94.159 | 98.586 | 99.271 | 86.783 | 93.448 | 51.60 km |
+| MidAmerica to St. Louis Lambert | 161.195 | 147.074 | 151.402 | 167.005 | 164.157 | 158.598 | 158.239 | 76.53 km |
+| St. Louis Downtown Airport to St. Louis Lambert | 111.294 | 104.007 | 106.072 | 109.604 | 106.189 | 106.002 | 107.195 | 35.13 km |
+
+These values come from
+`routes/output/st_louis_route_cost_analysis.csv`. They are weighted model
+scores, not monetary costs.
+
+The following table averages each weighted factor cost across the six traffic
+dates. The percentage in parentheses is that factor's share of the route's
+average total cost:
 
 | Route | Distance | Population | Airspace | Traffic |
 | --- | ---: | ---: | ---: | ---: |
-| MidAmerica to St. Louis Union Station | 33.3% | 13.1% | 31.0% | 22.6% |
-| MidAmerica to St. Louis Lambert | 28.7% | 11.6% | 39.9% | 19.7% |
-| St. Louis Downtown Airport to St. Louis Lambert | 20.4% | 18.9% | 41.6% | 19.1% |
+| MidAmerica to St. Louis Union Station | 34.073 (36.5%) | 13.044 (14.0%) | 33.040 (35.4%) | 13.292 (14.2%) |
+| MidAmerica to St. Louis Lambert | 50.537 (31.9%) | 19.719 (12.5%) | 70.233 (44.4%) | 17.749 (11.2%) |
+| St. Louis Downtown Airport to St. Louis Lambert | 23.199 (21.6%) | 21.548 (20.1%) | 47.367 (44.2%) | 15.081 (14.1%) |
 
 Across all 18 route and date combinations, the average distribution is:
 
-| Factor | Average share |
-| --- | ---: |
-| Distance | 27.5% |
-| Population | 14.5% |
-| Airspace | 37.5% |
-| Traffic | 20.5% |
+| Factor | Average cost | Share of average total |
+| --- | ---: | ---: |
+| Distance | 35.936 | 30.0% |
+| Population | 18.104 | 15.1% |
+| Airspace | 50.213 | 42.0% |
+| Traffic | 15.374 | 12.9% |
 
 Airspace is the largest average factor for both routes ending at Lambert.
 
 Traffic changes with the selected OpenSky date. Its contribution ranges from:
 
-- 16.3% to 25.9% for MidAmerica to Union Station
-- 16.4% to 23.2% for MidAmerica to Lambert
-- 16.4% to 21.6% for Downtown Airport to Lambert
+- 3.5% to 19.9% for MidAmerica to Union Station
+- 6.3% to 17.3% for MidAmerica to Lambert
+- 11.8% to 17.5% for Downtown Airport to Lambert
 
 The total weighted cost is not a physical distance or monetary value. It is
 the sum of the normalized, weighted edge penalties used by A*.
@@ -110,8 +123,11 @@ metadata for all three routes and six dates.
 - Raw weighted cost for each factor
 - Percentage contribution for each factor
 
-The PNG files contain one cost breakdown figure per traffic date. Each figure
-compares the three configured routes.
+`route_cost_breakdown_average.png` contains one pie chart for each configured
+route. Each pie uses the average distance, population, airspace, and traffic
+cost across the six traffic dates. The percentages are calculated from those
+average factor costs, so each pie shows the average contribution of every
+factor to that route's total cost.
 
 The three route-specific GeoJSON files each contain 30 route variants:
 
@@ -160,7 +176,7 @@ Generate the routes and analysis CSV:
 uv run python astar_routes.py
 ```
 
-Generate the cost breakdown charts:
+Generate the average cost breakdown chart:
 
 ```powershell
 uv run python make_route_cost_pies.py
