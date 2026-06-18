@@ -1,0 +1,5 @@
+factor,raw_min,raw_max,method,scale,clip_percentile,transform,power,normalized_min,normalized_max
+distance,293.53394379187375,707.1067811918159,max edge distance,707.1067811918159,,,1.0,0.41511968432423674,1.0
+population,0.0,120.0,max value,120.0,,,1.0,0.0,1.0
+traffic,0.0,36597.0,log1p percentile clipped value,4.74493212836325,95.0,log1p,0.75,0.0,1.0
+airspace,1.0315428133772876e-132,186.13069579064586,percentile clipped value,104.34270880559218,99.0,,0.75,3.135226079007246e-101,1.0
