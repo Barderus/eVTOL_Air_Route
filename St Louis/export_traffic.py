@@ -19,7 +19,8 @@ EXPORT_DATES = [
     "2025-07-14",
 ]
 SAMPLE_SECONDS = 1
-ALTITUDE_MAX_FT = 32808.4
+ALTITUDE_MAX_FT = 5000
+OVERWRITE_EXISTING = True
 TRINO_USER = os.environ.get("TRINO_USER")
 TRINO_JAR = r"C:\Users\Barderus_Legion\Downloads\trino-cli-480.jar"
 TRINO_SERVER = "https://trino.opensky-network.org"
@@ -120,7 +121,7 @@ def main():
         )
         output_path = os.path.join(settings.TRAFFIC_FOLDER, output_name)
 
-        if os.path.isfile(output_path):
+        if os.path.isfile(output_path) and not OVERWRITE_EXISTING:
             print(f"Skipping existing traffic data: {output_path}")
             continue
 
