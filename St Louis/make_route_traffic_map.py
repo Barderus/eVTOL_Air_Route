@@ -1,7 +1,7 @@
 """Overlay St. Louis A* routes on the 24-hour traffic-density heatmap."""
 
 import json
-from pathlib import Path
+import os
 
 import geopandas as gpd
 import pandas as pd
@@ -11,8 +11,10 @@ import settings
 from generate_astar_toggle_pages import ROUTES, ROUTE_SPECS
 
 
-ROOT = Path(__file__).resolve().parent
-OUTPUT_PATH = ROOT / settings.ROUTE_HTML_FOLDER / "st_louis_routes_24h_traffic.html"
+OUTPUT_PATH = os.path.join(
+    settings.ROUTE_HTML_FOLDER,
+    "st_louis_routes_24h_traffic.html",
+)
 
 
 HTML_TEMPLATE = """<!DOCTYPE html>
@@ -312,8 +314,11 @@ def build_24_hour_traffic():
     """Build only the 24-hour density payload needed by the overlay page."""
     output = {}
     for dataset in settings.TRAFFIC_DATASETS:
-        csv_path = ROOT / settings.TRAFFIC_FOLDER / dataset["filename"]
-        if not csv_path.is_file():
+        csv_path = os.path.join(
+            settings.TRAFFIC_FOLDER,
+            dataset["filename"],
+        )
+        if not os.path.isfile(csv_path):
             raise FileNotFoundError(f"Traffic file not found: {csv_path}")
 
         data = make_traffic_map.load_flight_data(csv_path)
@@ -330,12 +335,11 @@ def load_routes():
     """Load all route-pair comparison files into one feature collection."""
     frames = []
     for route in ROUTES:
-        route_path = (
-            ROOT
-            / settings.ROUTE_GEOJSON_FOLDER
-            / f"{route['slug']}_astar_routes.geojson"
+        route_path = os.path.join(
+            settings.ROUTE_GEOJSON_FOLDER,
+            f"{route['slug']}_astar_routes.geojson",
         )
-        if not route_path.is_file():
+        if not os.path.isfile(route_path):
             raise FileNotFoundError(
                 f"Route file not found: {route_path}. "
                 "Run generate_astar_toggle_pages.py first."
@@ -347,7 +351,9 @@ def load_routes():
         crs=frames[0].crs,
     )
     if pd.api.types.is_datetime64_any_dtype(combined["dataset_slug"]):
-        combined["dataset_slug"] = combined["dataset_slug"].dt.strftime("%Y-%m-%d")
+        combined["dataset_slug"] = combined["dataset_slug"].dt.strftime(
+            "%Y-%m-%d"
+        )
     return json.loads(combined.to_json())
 
 
@@ -381,8 +387,9 @@ def main():
         center_lon=settings.MAP_CENTER_LON,
         zoom=settings.MAP_ZOOM,
     )
-    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    OUTPUT_PATH.write_text(html, encoding="utf-8")
+    os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
+    with open(OUTPUT_PATH, "w", encoding="utf-8") as output_file:
+        output_file.write(html)
     print(f"Saved route and 24h traffic overlay: {OUTPUT_PATH}")
 
 

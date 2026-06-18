@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """Build St. Louis multi-date, single-factor route comparison pages.
 
 This script precomputes A* routes for every configured endpoint pair, traffic
@@ -9,7 +7,7 @@ Leaflet HTML page per endpoint pair.
 
 import json
 import math
-from pathlib import Path
+import os
 
 import geopandas as gpd
 import networkx as nx
@@ -19,11 +17,10 @@ from shapely.geometry import LineString, Point
 
 import settings
 
-ROOT = Path(__file__).resolve().parent
-GRID_PATH = ROOT / settings.RISK_GRID_GEOJSON
-TRAFFIC_OUTPUT = ROOT / settings.TRAFFIC_FOLDER
-GEOJSON_OUTPUT = ROOT / settings.ROUTE_GEOJSON_FOLDER
-HTML_OUTPUT = ROOT / settings.ROUTE_HTML_FOLDER
+GRID_PATH = settings.RISK_GRID_GEOJSON
+TRAFFIC_OUTPUT = settings.TRAFFIC_FOLDER
+GEOJSON_OUTPUT = settings.ROUTE_GEOJSON_FOLDER
+HTML_OUTPUT = settings.ROUTE_HTML_FOLDER
 
 DISTANCE_WEIGHT = settings.DISTANCE_WEIGHT
 POPULATION_WEIGHT = settings.POPULATION_WEIGHT
@@ -129,7 +126,7 @@ DATASETS = [
     {
         "slug": dataset["date"],
         "label": dataset["label"],
-        "csv_path": TRAFFIC_OUTPUT / dataset["filename"],
+        "csv_path": os.path.join(TRAFFIC_OUTPUT, dataset["filename"]),
     }
     for dataset in settings.TRAFFIC_DATASETS
 ]
@@ -547,9 +544,9 @@ def path_cost(graph: nx.Graph, path: list[int], weight: str) -> float:
     return sum(graph[path[i]][path[i + 1]][weight] for i in range(len(path) - 1))
 
 
-def detect_csv_encoding(csv_path: Path) -> str:
+def detect_csv_encoding(csv_path: str) -> str:
     """Handle the common BOM variants seen in exported CSV files."""
-    with csv_path.open("rb") as file_handle:
+    with open(csv_path, "rb") as file_handle:
         first_bytes = file_handle.read(4)
 
     if first_bytes.startswith(b"\xff\xfe") or first_bytes.startswith(b"\xfe\xff"):
@@ -608,7 +605,12 @@ def node_for_point(
     return int(centroids_m.distance(point_m).idxmin())
 
 
-def make_heuristic(distance_weight: float, cent_x: np.ndarray, cent_y: np.ndarray, max_edge_distance: float):
+def make_heuristic(
+    distance_weight: float,
+    cent_x: np.ndarray,
+    cent_y: np.ndarray,
+    max_edge_distance: float,
+):
     """Build the admissible A* heuristic for one route specification."""
     if distance_weight <= 0:
         return lambda _u, _v: 0.0
@@ -621,7 +623,11 @@ def make_heuristic(distance_weight: float, cent_x: np.ndarray, cent_y: np.ndarra
     return heuristic
 
 
-def route_line(grid: gpd.GeoDataFrame, path: list[int], simplify_tolerance_m: float = 0.0) -> LineString:
+def route_line(
+    grid: gpd.GeoDataFrame,
+    path: list[int],
+    simplify_tolerance_m: float = 0.0,
+) -> LineString:
     """Render a node path as a centroid line, with optional simplification."""
     line = LineString([grid.loc[node].geometry.centroid for node in path])
     if simplify_tolerance_m <= 0:
@@ -639,7 +645,7 @@ def route_line(grid: gpd.GeoDataFrame, path: list[int], simplify_tolerance_m: fl
     return line
 
 
-def load_traffic_counts(csv_path: Path, grid: gpd.GeoDataFrame) -> np.ndarray:
+def load_traffic_counts(csv_path: str, grid: gpd.GeoDataFrame) -> np.ndarray:
     """Convert raw OpenSky observations into per-cell counts for one dataset."""
     data = pd.read_csv(csv_path, encoding=detect_csv_encoding(csv_path))
     data = data.dropna(subset=["lat", "lon"]).copy()
@@ -747,7 +753,7 @@ def build_route_features() -> dict[str, gpd.GeoDataFrame]:
     # Precompute every destination/date/preset combination once so the HTML
     # pages only need to toggle prebuilt route features.
     for dataset in DATASETS:
-        if not dataset["csv_path"].exists():
+        if not os.path.isfile(dataset["csv_path"]):
             raise SystemExit(f"Traffic CSV not found: {dataset['csv_path']}")
 
         traffic_counts = load_traffic_counts(dataset["csv_path"], grid)
@@ -769,8 +775,19 @@ def build_route_features() -> dict[str, gpd.GeoDataFrame]:
             start_node, end_node = route_nodes[route["slug"]]
             for spec in ROUTE_SPECS:
                 weight_key = f"weight_{spec['name']}"
-                heuristic = make_heuristic(spec["distance_weight"], cent_x, cent_y, max_edge_distance)
-                path = nx.astar_path(graph, start_node, end_node, heuristic=heuristic, weight=weight_key)
+                heuristic = make_heuristic(
+                    spec["distance_weight"],
+                    cent_x,
+                    cent_y,
+                    max_edge_distance,
+                )
+                path = nx.astar_path(
+                    graph,
+                    start_node,
+                    end_node,
+                    heuristic=heuristic,
+                    weight=weight_key,
+                )
                 total_cost = path_cost(graph, path, weight_key)
                 route_rows_by_pair[route["slug"]].append(
                     {
@@ -816,13 +833,25 @@ def build_route_features() -> dict[str, gpd.GeoDataFrame]:
 def write_html(route: dict[str, object], route_geojson: dict[str, object]) -> None:
     """Write one self-contained Leaflet page for an endpoint pair."""
     page_title = f"{route['label']} A* Route"
-    output_path = HTML_OUTPUT / f"{route['slug']}_astar.html"
+    output_path = os.path.join(HTML_OUTPUT, f"{route['slug']}_astar.html")
     html = HTML_TEMPLATE.format(
         page_title=page_title,
         route_data=json.dumps(route_geojson),
-        dataset_order=json.dumps([{"slug": item["slug"], "label": item["label"]} for item in DATASETS]),
+        dataset_order=json.dumps(
+            [
+                {"slug": item["slug"], "label": item["label"]}
+                for item in DATASETS
+            ]
+        ),
         route_definitions=json.dumps(
-            [{"name": item["name"], "label": item["label"], "color": item["color"]} for item in ROUTE_SPECS]
+            [
+                {
+                    "name": item["name"],
+                    "label": item["label"],
+                    "color": item["color"],
+                }
+                for item in ROUTE_SPECS
+            ]
         ),
         start_point=json.dumps(route["start"]),
         destination_point=json.dumps(route["destination"]),
@@ -839,19 +868,23 @@ def write_html(route: dict[str, object], route_geojson: dict[str, object]) -> No
         center_lon=settings.MAP_CENTER_LON,
         zoom=settings.MAP_ZOOM,
     )
-    output_path.write_text(html, encoding="utf-8")
+    with open(output_path, "w", encoding="utf-8") as output_file:
+        output_file.write(html)
     print(f"Saved HTML: {output_path}")
 
 
 def main() -> None:
     """Generate all tracked route GeoJSON and HTML artifacts."""
-    HTML_OUTPUT.mkdir(parents=True, exist_ok=True)
-    GEOJSON_OUTPUT.mkdir(parents=True, exist_ok=True)
+    os.makedirs(HTML_OUTPUT, exist_ok=True)
+    os.makedirs(GEOJSON_OUTPUT, exist_ok=True)
     routes_by_pair = build_route_features()
 
     for route in ROUTES:
         route_gdf = routes_by_pair[route["slug"]]
-        geojson_path = GEOJSON_OUTPUT / f"{route['slug']}_astar_routes.geojson"
+        geojson_path = os.path.join(
+            GEOJSON_OUTPUT,
+            f"{route['slug']}_astar_routes.geojson",
+        )
         route_gdf.to_file(geojson_path, driver="GeoJSON")
         print(f"Saved GeoJSON: {geojson_path}")
         write_html(route, json.loads(route_gdf.to_json()))
