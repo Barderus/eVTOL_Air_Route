@@ -1,0 +1,4 @@
+threshold,cluster_count,largest_cluster_size,largest_cluster_percent,second_largest_cluster_size,singleton_cluster_count
+0.2,12,150,52.26480836236934,89,6
+0.15,7,187,65.15679442508711,89,2
+0.1,5,187,65.15679442508711,89,1
