@@ -1,0 +1,4 @@
+route_run_id,weight_id,direct_source_cluster_id,dbscan_cluster,distance_weight,population_weight,traffic_weight,airspace_weight,route_distance_km,total_weighted_score,path_nodes,representative_route_run_id,cluster_size,cluster_weight_space_percent,medoid_total_frechet_km,medoid_mean_frechet_km
+rr_all_0264,w_0264,cluster_001,dbscan_001,0.6,0.3,0.0,0.1,66.92640687119801,73.38097146679266,110,rr_all_0264,146,77.65957446808511,238.23376653529567,1.6429914933468668
+rr_all_0168,w_0168,cluster_003,dbscan_002,0.3,0.0,0.1,0.6,65.68376618407687,51.74796192120943,110,rr_all_0168,37,19.680851063829788,41.66249051570281,1.157291403213967
+rr_all_0256,w_0256,cluster_001,dbscan_003,0.6,0.0,0.4,0.0,65.68376618407666,76.38617046776368,110,rr_all_0256,5,2.6595744680851063,2.278294981345773,0.5695737453364432
