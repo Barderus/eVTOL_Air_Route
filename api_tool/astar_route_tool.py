@@ -1,5 +1,6 @@
 """Agent-safe tool wrapper for generating one A* route."""
 
+import os
 from numbers import Integral, Real
 
 from shapely.geometry import mapping
@@ -14,7 +15,9 @@ ASTAR_ROUTE_TOOL = {
         "Generate one eVTOL A* route from a saved routing graph package, "
         "requested origin/destination coordinates, and route cost weights. "
         "The output separates requested coordinates from snapped routing-grid "
-        "centroids so callers do not confuse user input with grid-cell geometry."
+        "centroids so callers do not confuse user input with grid-cell geometry. "
+        "This tool only saves a GeoJSON file when output_directory or "
+        "output_geojson_path is provided."
     ),
     "inputs": {
         "graph_path": {
@@ -48,6 +51,14 @@ ASTAR_ROUTE_TOOL = {
         "output_geojson_path": {
             "type": "string",
             "description": "Optional path where the generated route GeoJSON should be saved.",
+            "required": False,
+        },
+        "output_directory": {
+            "type": "string",
+            "description": (
+                "Optional folder where route.geojson should be saved. Ignored when "
+                "output_geojson_path is provided."
+            ),
             "required": False,
         },
     },
@@ -101,6 +112,15 @@ def validate_tool_inputs(graph_path, origin, destination, weights, route_id):
     missing_weights = sorted(required_weights - set(weights))
     if missing_weights:
         raise ValueError(f"weights missing required keys: {missing_weights}.")
+
+
+def resolve_output_geojson_path(route_id, output_geojson_path=None, output_directory=None):
+    """Resolve the GeoJSON output path requested by the caller."""
+    if output_geojson_path:
+        return output_geojson_path
+    if output_directory:
+        return os.path.join(output_directory, "route.geojson")
+    return None
 
 
 def serialize_route_result(route_result, output_geojson_path=None):
@@ -164,6 +184,7 @@ def generate_astar_route(
     weights,
     route_id,
     output_geojson_path=None,
+    output_directory=None,
 ):
     """
     Tool wrapper for one A* route generation call.
@@ -173,6 +194,11 @@ def generate_astar_route(
     """
     try:
         validate_tool_inputs(graph_path, origin, destination, weights, route_id)
+        resolved_output_geojson_path = resolve_output_geojson_path(
+            route_id=route_id,
+            output_geojson_path=output_geojson_path,
+            output_directory=output_directory,
+        )
         route_result = run_astar_route(
             graph_path=graph_path,
             origin=origin,
@@ -181,14 +207,19 @@ def generate_astar_route(
             route_id=route_id,
             interactive=False,
         )
-        save_route_outputs([route_result], geojson_path=output_geojson_path)
+        save_route_outputs([route_result], geojson_path=resolved_output_geojson_path)
+        outputs = {
+            "route_geojson_path": resolved_output_geojson_path,
+            "route_map_path": None,
+        }
         return {
             "status": "success",
             "tool": ASTAR_ROUTE_TOOL["name"],
             "route": serialize_route_result(
                 route_result,
-                output_geojson_path=output_geojson_path,
+                output_geojson_path=resolved_output_geojson_path,
             ),
+            "outputs": outputs,
             "error": None,
         }
     except Exception as error:
@@ -196,6 +227,10 @@ def generate_astar_route(
             "status": "failure",
             "tool": ASTAR_ROUTE_TOOL["name"],
             "route": None,
+            "outputs": {
+                "route_geojson_path": None,
+                "route_map_path": None,
+            },
             "error": {
                 "type": type(error).__name__,
                 "message": str(error),

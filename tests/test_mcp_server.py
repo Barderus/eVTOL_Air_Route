@@ -27,6 +27,10 @@ class McpServerTests(unittest.IsolatedAsyncioTestCase):
                     "output_geojson_path",
                     tools_result.tools[0].input_schema["properties"],
                 )
+                self.assertIn(
+                    "output_directory",
+                    tools_result.tools[0].input_schema["properties"],
+                )
 
                 call_result = await session.call_tool(
                     "generate_astar_route",
@@ -80,7 +84,8 @@ class McpServerTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_mcp_server_calls_make_route_map(self):
         with tempfile.TemporaryDirectory() as temp_dir:
-            route_geojson_path = os.path.join(temp_dir, "routes.geojson")
+            output_directory = os.path.join(temp_dir, "qwen_mcp_test")
+            route_geojson_path = os.path.join(output_directory, "route.geojson")
             output_html_path = os.path.join(temp_dir, "route_map.html")
 
             server_params = StdioServerParameters(
@@ -111,12 +116,12 @@ class McpServerTests(unittest.IsolatedAsyncioTestCase):
                                 "airspace_weight": 0.1,
                             },
                             "route_id": "mcp_map_test",
-                            "output_geojson_path": route_geojson_path,
+                            "output_directory": output_directory,
                         },
                     )
-                    route_geojson_from_tool = route_result.structured_content["route"][
-                        "outputs"
-                    ]["route_geojson_path"]
+                    route_geojson_from_tool = route_result.structured_content["outputs"][
+                        "route_geojson_path"
+                    ]
                     call_result = await session.call_tool(
                         "make_route_map",
                         arguments={

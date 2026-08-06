@@ -141,10 +141,47 @@ class GenerateAstarRouteTests(unittest.TestCase):
                 "destination",
                 "graph_path",
                 "origin",
+                "output_directory",
                 "output_geojson_path",
                 "route_id",
                 "weights",
             ],
+        )
+
+    def test_generate_astar_route_saves_geojson_from_output_directory(self):
+        weights = {
+            "distance_weight": 0.4,
+            "population_weight": 0.3,
+            "traffic_weight": 0.2,
+            "airspace_weight": 0.1,
+        }
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            graph_path = os.path.join(temp_dir, "routing_graph.pkl")
+            output_directory = os.path.join(temp_dir, "qwen_mcp_test")
+            expected_geojson_path = os.path.join(output_directory, "route.geojson")
+            with open(graph_path, "wb") as graph_file:
+                pickle.dump(self.make_graph_package(), graph_file)
+
+            result = generate_astar_route(
+                graph_path=graph_path,
+                origin={"lat": 38.005, "lon": -90.005},
+                destination={"lat": 38.005, "lon": -89.995},
+                weights=weights,
+                route_id="qwen_mcp_test",
+                output_directory=output_directory,
+            )
+
+            self.assertTrue(os.path.exists(expected_geojson_path))
+
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(
+            result["outputs"]["route_geojson_path"],
+            expected_geojson_path,
+        )
+        self.assertEqual(
+            result["route"]["outputs"]["route_geojson_path"],
+            expected_geojson_path,
         )
 
 
