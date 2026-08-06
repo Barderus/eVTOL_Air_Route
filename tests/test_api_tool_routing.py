@@ -71,6 +71,7 @@ class GenerateAstarRouteTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp_dir:
             graph_path = os.path.join(temp_dir, "routing_graph.pkl")
+            output_geojson_path = os.path.join(temp_dir, "routes.geojson")
             with open(graph_path, "wb") as graph_file:
                 pickle.dump(self.make_graph_package(), graph_file)
 
@@ -81,15 +82,41 @@ class GenerateAstarRouteTests(unittest.TestCase):
                     destination={"lat": 38.005, "lon": -89.995},
                     weights=weights,
                     route_id="test_route",
+                    output_geojson_path=output_geojson_path,
                 )
+
+            self.assertTrue(os.path.exists(output_geojson_path))
 
         self.assertEqual(result["status"], "success")
         self.assertEqual(result["tool"], "generate_astar_route")
         self.assertEqual(result["route"]["route_id"], "test_route")
+        self.assertEqual(
+            result["route"]["requested"]["origin"],
+            {"lat": 38.005, "lon": -90.005},
+        )
+        self.assertEqual(
+            result["route"]["requested"]["destination"],
+            {"lat": 38.005, "lon": -89.995},
+        )
+        self.assertEqual(result["route"]["snapped"]["origin"]["node_id"], 0)
+        self.assertEqual(result["route"]["snapped"]["destination"]["node_id"], 1)
         self.assertEqual(result["route"]["path_node_ids"], [0, 1])
         self.assertEqual(result["route"]["path_nodes"], 2)
-        self.assertEqual(result["route"]["route_geojson"]["type"], "LineString")
-        self.assertAlmostEqual(result["route"]["costs"]["route_distance_km"], 1.0)
+        self.assertEqual(
+            result["route"]["route"]["geometry_geojson"]["type"],
+            "LineString",
+        )
+        self.assertEqual(
+            result["route"]["outputs"]["route_geojson_path"],
+            output_geojson_path,
+        )
+        self.assertIsNone(result["route"]["outputs"]["route_map_path"])
+        self.assertAlmostEqual(result["route"]["route"]["distance_km"], 1.0)
+        self.assertAlmostEqual(result["route"]["costs"]["total_cost"], 0.56)
+        self.assertAlmostEqual(result["route"]["costs"]["distance_cost"], 0.4)
+        self.assertAlmostEqual(result["route"]["costs"]["population_cost"], 0.06)
+        self.assertAlmostEqual(result["route"]["costs"]["traffic_cost"], 0.06)
+        self.assertAlmostEqual(result["route"]["costs"]["airspace_cost"], 0.04)
         json.dumps(result)
 
     def test_generate_astar_route_returns_failure_without_weights(self):
@@ -110,7 +137,14 @@ class GenerateAstarRouteTests(unittest.TestCase):
         self.assertEqual(ASTAR_ROUTE_TOOL["name"], "generate_astar_route")
         self.assertEqual(
             sorted(ASTAR_ROUTE_TOOL["inputs"]),
-            ["destination", "graph_path", "origin", "route_id", "weights"],
+            [
+                "destination",
+                "graph_path",
+                "origin",
+                "output_geojson_path",
+                "route_id",
+                "weights",
+            ],
         )
 
 

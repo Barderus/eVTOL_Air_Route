@@ -5,13 +5,16 @@ from numbers import Integral, Real
 from shapely.geometry import mapping
 
 from api_tool.run_astar_route import run_astar_route
+from api_tool.save_route_outputs import save_route_outputs
 
 
 ASTAR_ROUTE_TOOL = {
     "name": "generate_astar_route",
     "description": (
         "Generate one eVTOL A* route from a saved routing graph package, "
-        "origin, destination, and route cost weights."
+        "requested origin/destination coordinates, and route cost weights. "
+        "The output separates requested coordinates from snapped routing-grid "
+        "centroids so callers do not confuse user input with grid-cell geometry."
     ),
     "inputs": {
         "graph_path": {
@@ -42,13 +45,18 @@ ASTAR_ROUTE_TOOL = {
             "description": "Caller-supplied route identifier.",
             "required": True,
         },
+        "output_geojson_path": {
+            "type": "string",
+            "description": "Optional path where the generated route GeoJSON should be saved.",
+            "required": False,
+        },
     },
     "output": {
         "type": "object",
         "description": (
-            "Dictionary with status, route identifiers, node path, lon/lat route "
-            "coordinates, GeoJSON geometry, WKT geometry, weights, costs, and "
-            "failure details when routing fails."
+            "Dictionary with status, requested coordinates, snapped grid-cell "
+            "coordinates, route start/end geometry, distance, cost components, "
+            "optional output paths, and failure details when routing fails."
         ),
     },
 }
@@ -95,29 +103,68 @@ def validate_tool_inputs(graph_path, origin, destination, weights, route_id):
         raise ValueError(f"weights missing required keys: {missing_weights}.")
 
 
-def serialize_route_result(route_result):
+def serialize_route_result(route_result, output_geojson_path=None):
     """Convert run_astar_route output into a simple JSON-friendly dictionary."""
     geometry = route_result["geometry"]
+    route_coordinates = route_result["route_path"]
     return to_json_safe(
         {
             "route_id": route_result["route_id"],
             "status": route_result["status"],
-            "origin": route_result["origin"],
-            "destination": route_result["destination"],
-            "origin_node": route_result["origin_node"],
-            "destination_node": route_result["destination_node"],
+            "requested": {
+                "origin": route_result["origin"],
+                "destination": route_result["destination"],
+            },
+            "snapped": {
+                "origin": {
+                    "node_id": route_result["origin_node"],
+                    "coordinate": route_coordinates[0],
+                },
+                "destination": {
+                    "node_id": route_result["destination_node"],
+                    "coordinate": route_coordinates[-1],
+                },
+            },
             "path_node_ids": route_result["path_node_ids"],
             "path_nodes": route_result["path_nodes"],
-            "route_path": route_result["route_path"],
-            "route_geojson": mapping(geometry),
-            "route_wkt": route_result["route_wkt"],
+            "route": {
+                "start_coordinate": route_coordinates[0],
+                "end_coordinate": route_coordinates[-1],
+                "path_coordinates": route_coordinates,
+                "geometry_geojson": mapping(geometry),
+                "geometry_wkt": route_result["route_wkt"],
+                "distance_km": route_result["costs"]["route_distance_km"],
+            },
             "weights": route_result["weights"],
-            "costs": route_result["costs"],
+            "costs": {
+                "total_cost": route_result["costs"]["total_cost"],
+                "distance_cost": route_result["costs"]["distance_cost"],
+                "population_cost": route_result["costs"]["population_cost"],
+                "traffic_cost": route_result["costs"]["traffic_cost"],
+                "airspace_cost": route_result["costs"]["airspace_cost"],
+                "normalized_sums": {
+                    "distance": route_result["costs"]["distance_norm_sum"],
+                    "population": route_result["costs"]["population_norm_sum"],
+                    "traffic": route_result["costs"]["traffic_norm_sum"],
+                    "airspace": route_result["costs"]["airspace_norm_sum"],
+                },
+            },
+            "outputs": {
+                "route_geojson_path": output_geojson_path,
+                "route_map_path": None,
+            },
         }
     )
 
 
-def generate_astar_route(graph_path, origin, destination, weights, route_id):
+def generate_astar_route(
+    graph_path,
+    origin,
+    destination,
+    weights,
+    route_id,
+    output_geojson_path=None,
+):
     """
     Tool wrapper for one A* route generation call.
 
@@ -134,10 +181,14 @@ def generate_astar_route(graph_path, origin, destination, weights, route_id):
             route_id=route_id,
             interactive=False,
         )
+        save_route_outputs([route_result], geojson_path=output_geojson_path)
         return {
             "status": "success",
             "tool": ASTAR_ROUTE_TOOL["name"],
-            "route": serialize_route_result(route_result),
+            "route": serialize_route_result(
+                route_result,
+                output_geojson_path=output_geojson_path,
+            ),
             "error": None,
         }
     except Exception as error:
