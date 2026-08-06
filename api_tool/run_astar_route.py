@@ -120,6 +120,14 @@ def make_route_geometry(projected_grid, path):
     return route_line.iloc[0]
 
 
+def route_geometry_to_path(geometry):
+    """Convert a route LineString to JSON-safe lon/lat path coordinates."""
+    return [
+        {"lon": float(longitude), "lat": float(latitude)}
+        for longitude, latitude in geometry.coords
+    ]
+
+
 def get_lat_lon(point):
     """Return latitude and longitude from a location dictionary or tuple."""
     if isinstance(point, dict):
@@ -136,6 +144,7 @@ def run_astar_route(
     destination=None,
     weights=None,
     route_id="route_001",
+    interactive=False,
 ):
     """
     Run A* for one origin, destination, and weight configuration.
@@ -143,7 +152,7 @@ def run_astar_route(
     Pass graph_package directly, load graph_path, or pass grid_path to build a
     graph before routing.
     """
-    if city_name is None:
+    if city_name is None and interactive:
         city_name = input("City or study area name: ").strip()
         grid_path = input("Scored grid path: ").strip()
 
@@ -151,6 +160,8 @@ def run_astar_route(
         if graph_path:
             graph_package = load_graph_package(graph_path)
         elif grid_path:
+            if city_name is None:
+                raise ValueError("city_name is required when building from grid_path.")
             graph_package = build_routing_graph(city_name=city_name, grid_path=grid_path)
         else:
             raise ValueError("Pass graph_package, graph_path, or grid_path.")
@@ -158,8 +169,10 @@ def run_astar_route(
     if origin is None or destination is None:
         raise ValueError("origin and destination are required.")
 
-    if weights is None:
+    if weights is None and interactive:
         weights = request_route_weights_from_user(require_sum_to_one=True)
+    elif weights is None:
+        raise ValueError("weights are required for non-interactive A* routing.")
 
     weight_validation = validate_route_weights(
         weights["distance_weight"],
@@ -215,13 +228,15 @@ def run_astar_route(
         "path_nodes": len(path),
         "weights": weights,
         "costs": path_costs,
+        "route_path": route_geometry_to_path(geometry),
+        "route_wkt": geometry.wkt,
         "geometry": geometry,
         "status": "success",
     }
 
 
 if __name__ == "__main__":
-    result = run_astar_route()
+    result = run_astar_route(interactive=True)
     printable = result.copy()
     printable["geometry"] = result["geometry"].wkt
     print(printable)
