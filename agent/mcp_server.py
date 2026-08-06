@@ -87,9 +87,8 @@ GENERATE_ASTAR_ROUTE_OUTPUT_SCHEMA = {
         "route": {
             "type": ["object", "null"],
             "description": (
-                "Route result with requested origin/destination, snapped "
-                "grid-cell origin/destination, route geometry, distance, cost "
-                "components, and optional output paths."
+                "Compact route metrics and geometry summary. Full GeoJSON is "
+                "not returned; use outputs.route_geojson_path when a file was saved."
             ),
         },
         "outputs": {

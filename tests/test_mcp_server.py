@@ -70,13 +70,19 @@ class McpServerTests(unittest.IsolatedAsyncioTestCase):
             13722,
         )
         self.assertEqual(
-            call_result.structured_content["route"]["route"]["geometry_geojson"]["type"],
+            call_result.structured_content["route"]["geometry_summary"]["geometry_type"],
             "LineString",
         )
         self.assertAlmostEqual(
-            call_result.structured_content["route"]["route"]["distance_km"],
+            call_result.structured_content["route"]["distance_km"],
             68.6335136523831,
         )
+        self.assertAlmostEqual(
+            call_result.structured_content["route"]["total_cost"],
+            51.9725486283908,
+        )
+        self.assertNotIn("geometry_geojson", call_result.structured_content["route"])
+        self.assertNotIn("path_coordinates", call_result.structured_content["route"])
         self.assertIsNone(
             call_result.structured_content["route"]["outputs"]["route_map_path"],
         )
@@ -85,7 +91,10 @@ class McpServerTests(unittest.IsolatedAsyncioTestCase):
     async def test_mcp_server_calls_make_route_map(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             output_directory = os.path.join(temp_dir, "qwen_mcp_test")
-            route_geojson_path = os.path.join(output_directory, "route.geojson")
+            route_geojson_path = os.path.join(
+                output_directory,
+                "route.geojson",
+            ).replace("\\", "/")
             output_html_path = os.path.join(temp_dir, "route_map.html")
 
             server_params = StdioServerParameters(

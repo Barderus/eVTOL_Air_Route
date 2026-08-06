@@ -3,8 +3,6 @@
 import os
 from numbers import Integral, Real
 
-from shapely.geometry import mapping
-
 from api_tool.run_astar_route import run_astar_route
 from api_tool.save_route_outputs import save_route_outputs
 
@@ -62,12 +60,13 @@ ASTAR_ROUTE_TOOL = {
             "required": False,
         },
     },
-    "output": {
+        "output": {
         "type": "object",
         "description": (
-            "Dictionary with status, requested coordinates, snapped grid-cell "
-            "coordinates, route start/end geometry, distance, cost components, "
-            "optional output paths, and failure details when routing fails."
+            "Compact dictionary with status, route metrics, geometry summary, "
+            "generated output paths, and failure details. Full GeoJSON geometry "
+            "is saved to file when an output path or directory is provided, not "
+            "returned in the tool response."
         ),
     },
 }
@@ -117,20 +116,21 @@ def validate_tool_inputs(graph_path, origin, destination, weights, route_id):
 def resolve_output_geojson_path(route_id, output_geojson_path=None, output_directory=None):
     """Resolve the GeoJSON output path requested by the caller."""
     if output_geojson_path:
-        return output_geojson_path
+        return output_geojson_path.replace("\\", "/")
     if output_directory:
-        return os.path.join(output_directory, "route.geojson")
+        return os.path.join(output_directory, "route.geojson").replace("\\", "/")
     return None
 
 
 def serialize_route_result(route_result, output_geojson_path=None):
     """Convert run_astar_route output into a simple JSON-friendly dictionary."""
-    geometry = route_result["geometry"]
     route_coordinates = route_result["route_path"]
     return to_json_safe(
         {
             "route_id": route_result["route_id"],
-            "status": route_result["status"],
+            "path_nodes": route_result["path_nodes"],
+            "distance_km": route_result["costs"]["route_distance_km"],
+            "total_cost": route_result["costs"]["total_cost"],
             "requested": {
                 "origin": route_result["origin"],
                 "destination": route_result["destination"],
@@ -145,15 +145,10 @@ def serialize_route_result(route_result, output_geojson_path=None):
                     "coordinate": route_coordinates[-1],
                 },
             },
-            "path_node_ids": route_result["path_node_ids"],
-            "path_nodes": route_result["path_nodes"],
-            "route": {
+            "geometry_summary": {
                 "start_coordinate": route_coordinates[0],
                 "end_coordinate": route_coordinates[-1],
-                "path_coordinates": route_coordinates,
-                "geometry_geojson": mapping(geometry),
-                "geometry_wkt": route_result["route_wkt"],
-                "distance_km": route_result["costs"]["route_distance_km"],
+                "geometry_type": "LineString",
             },
             "weights": route_result["weights"],
             "costs": {

@@ -71,7 +71,10 @@ class GenerateAstarRouteTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp_dir:
             graph_path = os.path.join(temp_dir, "routing_graph.pkl")
-            output_geojson_path = os.path.join(temp_dir, "routes.geojson")
+            output_geojson_path = os.path.join(temp_dir, "routes.geojson").replace(
+                "\\",
+                "/",
+            )
             with open(graph_path, "wb") as graph_file:
                 pickle.dump(self.make_graph_package(), graph_file)
 
@@ -100,18 +103,20 @@ class GenerateAstarRouteTests(unittest.TestCase):
         )
         self.assertEqual(result["route"]["snapped"]["origin"]["node_id"], 0)
         self.assertEqual(result["route"]["snapped"]["destination"]["node_id"], 1)
-        self.assertEqual(result["route"]["path_node_ids"], [0, 1])
         self.assertEqual(result["route"]["path_nodes"], 2)
         self.assertEqual(
-            result["route"]["route"]["geometry_geojson"]["type"],
+            result["route"]["geometry_summary"]["geometry_type"],
             "LineString",
         )
+        self.assertNotIn("geometry_geojson", result["route"])
+        self.assertNotIn("path_coordinates", result["route"])
         self.assertEqual(
             result["route"]["outputs"]["route_geojson_path"],
             output_geojson_path,
         )
         self.assertIsNone(result["route"]["outputs"]["route_map_path"])
-        self.assertAlmostEqual(result["route"]["route"]["distance_km"], 1.0)
+        self.assertAlmostEqual(result["route"]["distance_km"], 1.0)
+        self.assertAlmostEqual(result["route"]["total_cost"], 0.56)
         self.assertAlmostEqual(result["route"]["costs"]["total_cost"], 0.56)
         self.assertAlmostEqual(result["route"]["costs"]["distance_cost"], 0.4)
         self.assertAlmostEqual(result["route"]["costs"]["population_cost"], 0.06)
@@ -159,7 +164,10 @@ class GenerateAstarRouteTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             graph_path = os.path.join(temp_dir, "routing_graph.pkl")
             output_directory = os.path.join(temp_dir, "qwen_mcp_test")
-            expected_geojson_path = os.path.join(output_directory, "route.geojson")
+            expected_geojson_path = os.path.join(
+                output_directory,
+                "route.geojson",
+            ).replace("\\", "/")
             with open(graph_path, "wb") as graph_file:
                 pickle.dump(self.make_graph_package(), graph_file)
 
@@ -179,6 +187,7 @@ class GenerateAstarRouteTests(unittest.TestCase):
             result["outputs"]["route_geojson_path"],
             expected_geojson_path,
         )
+        self.assertNotIn("\\", result["outputs"]["route_geojson_path"])
         self.assertEqual(
             result["route"]["outputs"]["route_geojson_path"],
             expected_geojson_path,
