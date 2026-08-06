@@ -19,7 +19,7 @@ GENERATE_ASTAR_ROUTE_INPUT_SCHEMA = {
         },
         "origin": {
             "type": "object",
-            "description": "Origin coordinate.",
+            "description": "Requested origin coordinate from the caller.",
             "properties": {
                 "lat": {"type": "number"},
                 "lon": {"type": "number"},
@@ -29,7 +29,7 @@ GENERATE_ASTAR_ROUTE_INPUT_SCHEMA = {
         },
         "destination": {
             "type": "object",
-            "description": "Destination coordinate.",
+            "description": "Requested destination coordinate from the caller.",
             "properties": {
                 "lat": {"type": "number"},
                 "lon": {"type": "number"},
@@ -58,6 +58,10 @@ GENERATE_ASTAR_ROUTE_INPUT_SCHEMA = {
             "type": "string",
             "description": "Caller-supplied route identifier.",
         },
+        "output_geojson_path": {
+            "type": "string",
+            "description": "Optional path where the generated route GeoJSON should be saved.",
+        },
     },
     "required": ["graph_path", "origin", "destination", "weights", "route_id"],
     "additionalProperties": False,
@@ -69,7 +73,14 @@ GENERATE_ASTAR_ROUTE_OUTPUT_SCHEMA = {
     "properties": {
         "status": {"type": "string", "enum": ["success", "failure"]},
         "tool": {"type": "string"},
-        "route": {"type": ["object", "null"]},
+        "route": {
+            "type": ["object", "null"],
+            "description": (
+                "Route result with requested origin/destination, snapped "
+                "grid-cell origin/destination, route geometry, distance, cost "
+                "components, and optional output paths."
+            ),
+        },
         "error": {"type": ["object", "null"]},
     },
     "required": ["status", "tool", "route", "error"],
@@ -111,6 +122,7 @@ async def call_tool(_context, params):
         destination=arguments.get("destination"),
         weights=arguments.get("weights"),
         route_id=arguments.get("route_id"),
+        output_geojson_path=arguments.get("output_geojson_path"),
     )
     return make_tool_result(result, is_error=result["status"] != "success")
 

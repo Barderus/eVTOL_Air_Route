@@ -21,6 +21,10 @@ class McpServerTests(unittest.IsolatedAsyncioTestCase):
                 tools_result = await session.list_tools()
                 tool_names = [tool.name for tool in tools_result.tools]
                 self.assertEqual(tool_names, ["generate_astar_route"])
+                self.assertIn(
+                    "output_geojson_path",
+                    tools_result.tools[0].input_schema["properties"],
+                )
 
                 call_result = await session.call_tool(
                     "generate_astar_route",
@@ -52,8 +56,23 @@ class McpServerTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(call_result.structured_content["route"]["path_nodes"], 113)
         self.assertEqual(
-            call_result.structured_content["route"]["route_geojson"]["type"],
+            call_result.structured_content["route"]["requested"]["origin"]["lat"],
+            41.695923717435235,
+        )
+        self.assertEqual(
+            call_result.structured_content["route"]["snapped"]["origin"]["node_id"],
+            13722,
+        )
+        self.assertEqual(
+            call_result.structured_content["route"]["route"]["geometry_geojson"]["type"],
             "LineString",
+        )
+        self.assertAlmostEqual(
+            call_result.structured_content["route"]["route"]["distance_km"],
+            68.6335136523831,
+        )
+        self.assertIsNone(
+            call_result.structured_content["route"]["outputs"]["route_map_path"],
         )
         json.loads(call_result.content[0].text)
 
