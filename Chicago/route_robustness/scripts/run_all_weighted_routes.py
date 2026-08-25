@@ -1,4 +1,4 @@
-"""Run route robustness A* routes for all weight configurations."""
+"""Run route robustness A* routes for the additional Chicago route pairs."""
 
 import json
 import math
@@ -15,22 +15,36 @@ from shapely.geometry import LineString, Point
 # Input files
 GRID_PATH = "Chicago/geojson/risk_grid_v7.geojson"
 TRAFFIC_CSV_PATH = "Chicago/opensky/output/ohare_2026-03-07_1s_15nm_bbox.csv"
-WEIGHT_CONFIGURATIONS_CSV = "route_robustness/output/weight_configurations.csv"
+WEIGHT_CONFIGURATIONS_CSV = "Chicago/route_robustness/output/weight_configurations.csv"
 
 # Output files
-OUTPUT_FOLDER = "route_robustness/output"
+OUTPUT_FOLDER = "Chicago/route_robustness/output"
 ROUTE_RUNS_CSV = os.path.join(OUTPUT_FOLDER, "all_route_runs.csv")
 ROUTES_GEOJSON = os.path.join(OUTPUT_FOLDER, "all_routes.geojson")
+ADDITIONAL_ROUTE_RUNS_CSV = os.path.join(OUTPUT_FOLDER, "additional_route_runs.csv")
+ADDITIONAL_ROUTES_GEOJSON = os.path.join(OUTPUT_FOLDER, "additional_routes.geojson")
 
-# Route settings for the first full robustness run
-ROUTE_PAIR = "clow_to_chicago_union_station"
 ORIGIN_LABEL = "Clow International Airport"
 ORIGIN_LAT = 41.695923717435235
 ORIGIN_LON = -88.12876224517822
-DESTINATION_LABEL = "Chicago Union Station"
-DESTINATION_LAT = 41.87838051825937
-DESTINATION_LON = -87.63905525207521
 TRAFFIC_DATASET = "ohare_2026-03-07_1s_15nm_bbox"
+
+ROUTE_PAIRS = [
+    {
+        "route_pair": "clow_to_ohare",
+        "route_pair_label": "Clow International Airport to O'Hare International Airport",
+        "destination_label": "O'Hare International Airport",
+        "destination_lat": 41.97807408541273,
+        "destination_lon": -87.90902412382081,
+    },
+    {
+        "route_pair": "clow_to_midway",
+        "route_pair_label": "Clow International Airport to Midway International Airport",
+        "destination_label": "Midway International Airport",
+        "destination_lat": 41.7856116663475,
+        "destination_lon": -87.75331135429448,
+    },
+]
 
 # Grid field settings. Edit these for another city if its column names differ.
 POPULATION_FIELD = "city_risk"
@@ -340,7 +354,7 @@ def load_weight_configurations():
 
 
 def main():
-    """Run every weighted route and save route-run artifacts."""
+    """Run every weighted route for the missing O'Hare and Midway route pairs."""
     require_input_files()
     os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
@@ -350,105 +364,114 @@ def main():
     weights = load_weight_configurations()
     graph, projected_grid, centroid_x, centroid_y, normalization_scales = build_graph(grid)
     start_node = find_grid_cell(ORIGIN_LAT, ORIGIN_LON, grid, projected_grid)
-    end_node = find_grid_cell(DESTINATION_LAT, DESTINATION_LON, grid, projected_grid)
 
     print("Graph nodes:", graph.number_of_nodes())
     print("Graph edges:", graph.number_of_edges())
     print("Start node:", start_node)
-    print("End node:", end_node)
+    print("Route pairs:", len(ROUTE_PAIRS))
     print("Weight configurations:", len(weights))
 
     route_rows = []
     route_geometries = []
 
-    for row_index, weights_row in weights.iterrows():
-        route_run_id = f"rr_all_{row_index + 1:04d}"
-        start_time = time.perf_counter()
-        heuristic = make_heuristic(
-            float(weights_row["distance_weight"]),
-            centroid_x,
-            centroid_y,
-            normalization_scales["distance_scale"],
+    for route_pair in ROUTE_PAIRS:
+        end_node = find_grid_cell(
+            route_pair["destination_lat"],
+            route_pair["destination_lon"],
+            grid,
+            projected_grid,
         )
-        weight_function = make_weight_function(weights_row)
+        print(f"Running {route_pair['route_pair_label']} to node {end_node}")
 
-        status = "success"
-        failure_reason = ""
-        path = []
-        geometry = None
-        metrics = {
-            "route_distance_km": np.nan,
-            "distance_norm_sum": np.nan,
-            "population_norm_sum": np.nan,
-            "traffic_norm_sum": np.nan,
-            "airspace_norm_sum": np.nan,
-            "total_weighted_score": np.nan,
-        }
-
-        try:
-            path = nx.astar_path(
-                graph,
-                start_node,
-                end_node,
-                heuristic=heuristic,
-                weight=weight_function,
+        for row_index, weights_row in weights.iterrows():
+            route_run_id = f"chi_{route_pair['route_pair']}_{row_index + 1:04d}"
+            start_time = time.perf_counter()
+            heuristic = make_heuristic(
+                float(weights_row["distance_weight"]),
+                centroid_x,
+                centroid_y,
+                normalization_scales["distance_scale"],
             )
-            metrics = calculate_path_metrics(graph, path, weights_row)
-            geometry = make_route_geometry(projected_grid, path)
-        except nx.NetworkXNoPath as error:
-            status = "failed"
-            failure_reason = str(error)
+            weight_function = make_weight_function(weights_row)
 
-        elapsed_seconds = time.perf_counter() - start_time
+            status = "success"
+            failure_reason = ""
+            path = []
+            geometry = None
+            metrics = {
+                "route_distance_km": np.nan,
+                "distance_norm_sum": np.nan,
+                "population_norm_sum": np.nan,
+                "traffic_norm_sum": np.nan,
+                "airspace_norm_sum": np.nan,
+                "total_weighted_score": np.nan,
+            }
 
-        route_row = {
-            "route_run_id": route_run_id,
-            "weight_id": weights_row["weight_id"],
-            "weight_set": weights_row.get("weight_set", ""),
-            "is_grid_weight": weights_row.get("is_grid_weight", ""),
-            "is_equal_weight": weights_row.get("is_equal_weight", ""),
-            "route_pair": ROUTE_PAIR,
-            "origin_label": ORIGIN_LABEL,
-            "destination_label": DESTINATION_LABEL,
-            "origin_lat": ORIGIN_LAT,
-            "origin_lon": ORIGIN_LON,
-            "destination_lat": DESTINATION_LAT,
-            "destination_lon": DESTINATION_LON,
-            "traffic_dataset": TRAFFIC_DATASET,
-            "distance_weight": float(weights_row["distance_weight"]),
-            "population_weight": float(weights_row["population_weight"]),
-            "traffic_weight": float(weights_row["traffic_weight"]),
-            "airspace_weight": float(weights_row["airspace_weight"]),
-            "path_nodes": len(path),
-            "path_node_ids": json.dumps(path),
-            "elapsed_seconds": elapsed_seconds,
-            "status": status,
-            "failure_reason": failure_reason,
-        }
-        route_row.update(metrics)
-        route_rows.append(route_row)
+            try:
+                path = nx.astar_path(
+                    graph,
+                    start_node,
+                    end_node,
+                    heuristic=heuristic,
+                    weight=weight_function,
+                )
+                metrics = calculate_path_metrics(graph, path, weights_row)
+                geometry = make_route_geometry(projected_grid, path)
+            except nx.NetworkXNoPath as error:
+                status = "failed"
+                failure_reason = str(error)
 
-        if geometry is not None:
-            route_geometries.append(geometry)
-        else:
-            route_geometries.append(LineString())
+            elapsed_seconds = time.perf_counter() - start_time
 
-        print(
-            route_run_id,
-            weights_row["weight_id"],
-            status,
-            f"score={metrics['total_weighted_score']:.4f}",
-            f"seconds={elapsed_seconds:.3f}",
-        )
+            route_row = {
+                "route_run_id": route_run_id,
+                "weight_id": weights_row["weight_id"],
+                "weight_set": weights_row.get("weight_set", ""),
+                "is_grid_weight": weights_row.get("is_grid_weight", ""),
+                "is_equal_weight": weights_row.get("is_equal_weight", ""),
+                "route_pair": route_pair["route_pair"],
+                "route_pair_label": route_pair["route_pair_label"],
+                "origin_label": ORIGIN_LABEL,
+                "destination_label": route_pair["destination_label"],
+                "origin_lat": ORIGIN_LAT,
+                "origin_lon": ORIGIN_LON,
+                "destination_lat": route_pair["destination_lat"],
+                "destination_lon": route_pair["destination_lon"],
+                "traffic_dataset": TRAFFIC_DATASET,
+                "distance_weight": float(weights_row["distance_weight"]),
+                "population_weight": float(weights_row["population_weight"]),
+                "traffic_weight": float(weights_row["traffic_weight"]),
+                "airspace_weight": float(weights_row["airspace_weight"]),
+                "path_nodes": len(path),
+                "path_node_ids": json.dumps(path),
+                "elapsed_seconds": elapsed_seconds,
+                "status": status,
+                "failure_reason": failure_reason,
+            }
+            route_row.update(metrics)
+            route_rows.append(route_row)
+
+            if geometry is not None:
+                route_geometries.append(geometry)
+            else:
+                route_geometries.append(LineString())
+
+            print(
+                route_run_id,
+                weights_row["weight_id"],
+                status,
+                f"score={metrics['total_weighted_score']:.4f}",
+                f"seconds={elapsed_seconds:.3f}",
+            )
 
     route_runs = pd.DataFrame(route_rows)
     routes = gpd.GeoDataFrame(route_runs, geometry=route_geometries, crs="EPSG:4326")
 
-    route_runs.to_csv(ROUTE_RUNS_CSV, index=False)
-    routes.to_file(ROUTES_GEOJSON, driver="GeoJSON")
+    route_runs.to_csv(ADDITIONAL_ROUTE_RUNS_CSV, index=False)
+    routes.to_file(ADDITIONAL_ROUTES_GEOJSON, driver="GeoJSON")
 
-    print(f"Saved route runs: {ROUTE_RUNS_CSV}")
-    print(f"Saved route geometries: {ROUTES_GEOJSON}")
+    print(f"Saved additional route runs: {ADDITIONAL_ROUTE_RUNS_CSV}")
+    print(f"Saved additional route geometries: {ADDITIONAL_ROUTES_GEOJSON}")
 
 
 if __name__ == "__main__":
