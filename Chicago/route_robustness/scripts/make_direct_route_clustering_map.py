@@ -38,17 +38,17 @@ METHODS = [
     },
     {
         "key": "dbscan_cluster",
-        "label": "DBSCAN on Jaccard",
+        "label": "DBSCAN on Frechet",
         "file": DBSCAN_CSV,
         "cluster_column": "dbscan_cluster",
-        "description": "DBSCAN using Jaccard distance with eps 0.75 and min_samples 4.",
+        "description": "DBSCAN using discrete Frechet distance with eps 2.5 km and min_samples 4.",
     },
     {
         "key": "optics_cluster",
-        "label": "OPTICS on Jaccard",
+        "label": "OPTICS on Frechet",
         "file": OPTICS_CSV,
         "cluster_column": "optics_cluster",
-        "description": "OPTICS-style ordering using Jaccard distance with extraction eps 0.75.",
+        "description": "OPTICS-style ordering using discrete Frechet distance with extraction eps 2.5 km.",
     },
     {
         "key": "hierarchical_jaccard_cluster",
@@ -365,7 +365,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         `;
       }}).join("");
       div.innerHTML = `
-        <h1>Clustering Method</h1>
+        <h1>Direct Route Clustering</h1>
         ${{rows}}
       `;
       L.DomEvent.disableClickPropagation(div);

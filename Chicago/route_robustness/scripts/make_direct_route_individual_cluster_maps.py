@@ -36,18 +36,18 @@ METHODS = [
         "description": "Connected components using shared path-node Jaccard distance <= 0.75.",
     },
     {
-        "label": "DBSCAN On Jaccard",
+        "label": "DBSCAN On Frechet",
         "file": DBSCAN_CSV,
         "cluster_column": "dbscan_cluster",
         "output_html": "direct_route_clusters_dbscan.html",
-        "description": "DBSCAN using Jaccard distance with eps 0.75 and min_samples 4.",
+        "description": "DBSCAN using discrete Frechet distance with eps 2.5 km and min_samples 4.",
     },
     {
-        "label": "OPTICS On Jaccard",
+        "label": "OPTICS On Frechet",
         "file": OPTICS_CSV,
         "cluster_column": "optics_cluster",
         "output_html": "direct_route_clusters_optics.html",
-        "description": "OPTICS-style ordering using Jaccard distance with extraction eps 0.75.",
+        "description": "OPTICS-style ordering using discrete Frechet distance with extraction eps 2.5 km.",
     },
     {
         "label": "Hierarchical On Jaccard",
@@ -333,7 +333,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
         `;
       }}).join("");
       div.innerHTML = `
-        <h1>Clusters</h1>
+        <h1>{map_title}</h1>
         <div>${{rows}}</div>
       `;
       return div;

@@ -11,6 +11,57 @@ DIRECT_ROUTE_WEIGHTS_CSV = "route_robustness/output/direct_route_weight_configur
 OUTPUT_FOLDER = "route_robustness/output"
 OUTPUT_CSV = os.path.join(OUTPUT_FOLDER, "route_weight_barycentric_coordinates.csv")
 OUTPUT_HTML = os.path.join(OUTPUT_FOLDER, "route_weight_barycentric_plot.html")
+DBSCAN_CSV = "route_robustness/output/direct_route_clusters_dbscan.csv"
+HIERARCHICAL_CSV = (
+    "route_robustness/output/direct_route_clusters_hierarchical_jaccard.csv"
+)
+FRECHET_CSV = "route_robustness/output/direct_route_clusters_frechet.csv"
+EDIT_DISTANCE_CSV = "route_robustness/output/direct_route_clusters_edit_distance.csv"
+
+CLUSTER_METHODS = [
+    {
+        "label": "DBSCAN On Frechet",
+        "file": DBSCAN_CSV,
+        "cluster_column": "dbscan_cluster",
+        "output_html": "route_weight_barycentric_dbscan.html",
+    },
+    {
+        "label": "Hierarchical On Jaccard",
+        "file": HIERARCHICAL_CSV,
+        "cluster_column": "hierarchical_jaccard_cluster",
+        "output_html": "route_weight_barycentric_hierarchical_jaccard.html",
+    },
+    {
+        "label": "Hierarchical On Edit Distance",
+        "file": EDIT_DISTANCE_CSV,
+        "cluster_column": "edit_distance_cluster",
+        "output_html": "route_weight_barycentric_edit_distance.html",
+    },
+    {
+        "label": "Hierarchical On Frechet",
+        "file": FRECHET_CSV,
+        "cluster_column": "frechet_cluster",
+        "output_html": "route_weight_barycentric_frechet.html",
+    },
+]
+
+CLUSTER_COLORS = [
+    "#1b9e77",
+    "#d95f02",
+    "#7570b3",
+    "#e7298a",
+    "#66a61e",
+    "#e6ab02",
+    "#a6761d",
+    "#1f78b4",
+    "#b15928",
+    "#6a3d9a",
+    "#fb9a99",
+    "#33a02c",
+    "#e31a1c",
+    "#ff7f00",
+    "#6d6d6d",
+]
 
 WEIGHT_COLUMNS = [
     "distance_weight",
@@ -72,6 +123,30 @@ def load_route_weight_table():
     return route_runs
 
 
+def load_cluster_weight_table(method):
+    """Load all route weights and attach one direct-route cluster table."""
+    route_weights = load_route_weight_table()
+    clusters = pd.read_csv(method["file"])
+    require_columns(
+        clusters,
+        ["route_run_id", method["cluster_column"], *WEIGHT_COLUMNS],
+        method["file"],
+    )
+    if clusters.empty:
+        raise ValueError(f"No routes found in cluster table: {method['file']}")
+
+    cluster_assignments = clusters[["route_run_id", method["cluster_column"]]]
+    route_weights = route_weights.merge(
+        cluster_assignments,
+        on="route_run_id",
+        how="left",
+    )
+    route_weights["route_type"] = route_weights[method["cluster_column"]].fillna(
+        "Non-direct route"
+    )
+    return route_weights
+
+
 def add_barycentric_coordinates(route_weights):
     """Convert route weights to 3D barycentric tetrahedron coordinates."""
     route_weights = route_weights.copy()
@@ -126,6 +201,100 @@ def build_route_trace(route_weights, label, is_direct, color, marker_size):
             "<extra></extra>"
         ),
     }
+
+
+def build_cluster_trace(route_weights, cluster_column, cluster_id, color):
+    """Build one Plotly 3D scatter trace for a cluster."""
+    subset = route_weights[route_weights[cluster_column] == cluster_id]
+    customdata = subset[
+        [
+            "route_run_id",
+            "weight_id",
+            "distance_weight",
+            "population_weight",
+            "traffic_weight",
+            "airspace_weight",
+        ]
+    ].values.tolist()
+
+    return {
+        "type": "scatter3d",
+        "mode": "markers",
+        "name": f"{cluster_id} ({len(subset)})",
+        "x": subset["barycentric_x"].round(6).tolist(),
+        "y": subset["barycentric_y"].round(6).tolist(),
+        "z": subset["barycentric_z"].round(6).tolist(),
+        "customdata": customdata,
+        "marker": {
+            "size": 5.8,
+            "color": color,
+            "opacity": 0.88,
+            "line": {"color": "white", "width": 0.8},
+        },
+        "hovertemplate": (
+            "D: %{customdata[2]:.2f}<br>"
+            "A: %{customdata[5]:.2f}<br>"
+            "P: %{customdata[3]:.2f}<br>"
+            "T: %{customdata[4]:.2f}"
+            "<extra></extra>"
+        ),
+    }
+
+
+def build_non_direct_trace(route_weights):
+    """Build one Plotly 3D scatter trace for non-direct routes."""
+    subset = route_weights[~route_weights["is_direct_route"]]
+    customdata = subset[
+        [
+            "route_run_id",
+            "weight_id",
+            "distance_weight",
+            "population_weight",
+            "traffic_weight",
+            "airspace_weight",
+        ]
+    ].values.tolist()
+
+    return {
+        "type": "scatter3d",
+        "mode": "markers",
+        "name": f"Non-direct route ({len(subset)})",
+        "x": subset["barycentric_x"].round(6).tolist(),
+        "y": subset["barycentric_y"].round(6).tolist(),
+        "z": subset["barycentric_z"].round(6).tolist(),
+        "customdata": customdata,
+        "marker": {
+            "size": 4.6,
+            "color": "#111111",
+            "opacity": 0.62,
+            "line": {"color": "white", "width": 0.7},
+        },
+        "hovertemplate": (
+            "D: %{customdata[2]:.2f}<br>"
+            "A: %{customdata[5]:.2f}<br>"
+            "P: %{customdata[3]:.2f}<br>"
+            "T: %{customdata[4]:.2f}"
+            "<extra></extra>"
+        ),
+    }
+
+
+def build_cluster_color_map(route_weights, cluster_column):
+    """Assign cluster colors using the same size-ordered palette as route maps."""
+    cluster_counts = (
+        route_weights[route_weights["is_direct_route"]]
+        .groupby(cluster_column)
+        .size()
+        .sort_values(ascending=False)
+        .reset_index(name="route_count")
+    )
+
+    cluster_colors = {}
+    for color_index, row in enumerate(cluster_counts.itertuples(index=False)):
+        cluster_id = getattr(row, cluster_column)
+        cluster_colors[cluster_id] = CLUSTER_COLORS[color_index % len(CLUSTER_COLORS)]
+
+    return cluster_colors, cluster_counts
 
 
 def build_frame_traces():
@@ -197,8 +366,11 @@ def build_frame_traces():
     return [face_trace, edge_trace, anchor_trace]
 
 
-def make_plot(route_weights):
+def make_plot(route_weights, output_html=OUTPUT_HTML, title=None):
     """Create and save the interactive route weight barycentric plot."""
+    if title is None:
+        title = "3D Route Weight Barycentric Tetrahedron"
+
     traces = [
         *build_frame_traces(),
         build_route_trace(route_weights, "Non-direct route", False, "#2563eb", 4.8),
@@ -206,7 +378,7 @@ def make_plot(route_weights):
     ]
     layout = {
         "title": {
-            "text": "3D Route Weight Barycentric Tetrahedron",
+            "text": title,
             "x": 0.5,
             "xanchor": "center",
         },
@@ -244,8 +416,80 @@ def make_plot(route_weights):
         "hovermode": "closest",
     }
     html = build_html(traces, layout)
-    with open(OUTPUT_HTML, "w", encoding="utf-8") as file_handle:
+    with open(output_html, "w", encoding="utf-8") as file_handle:
         file_handle.write(html)
+
+
+def make_cluster_plot(route_weights, method):
+    """Create and save one cluster-colored route weight tetrahedron."""
+    cluster_column = method["cluster_column"]
+    cluster_colors, cluster_counts = build_cluster_color_map(
+        route_weights,
+        cluster_column,
+    )
+
+    traces = [*build_frame_traces(), build_non_direct_trace(route_weights)]
+    for row in cluster_counts.itertuples(index=False):
+        cluster_id = getattr(row, cluster_column)
+        traces.append(
+            build_cluster_trace(
+                route_weights[route_weights["is_direct_route"]],
+                cluster_column,
+                cluster_id,
+                cluster_colors[cluster_id],
+            )
+        )
+
+    layout = {
+        "title": {
+            "text": f"3D Route Weight Barycentric Tetrahedron - {method['label']}",
+            "x": 0.5,
+            "xanchor": "center",
+        },
+        "scene": {
+            "xaxis": {
+                "title": "X",
+                "range": [-1.18, 1.18],
+                "backgroundcolor": "white",
+                "gridcolor": "#e5e7eb",
+                "zerolinecolor": "#d1d5db",
+            },
+            "yaxis": {
+                "title": "Y",
+                "range": [-1.18, 1.18],
+                "backgroundcolor": "white",
+                "gridcolor": "#e5e7eb",
+                "zerolinecolor": "#d1d5db",
+            },
+            "zaxis": {
+                "title": "Z",
+                "range": [-1.18, 1.18],
+                "backgroundcolor": "white",
+                "gridcolor": "#e5e7eb",
+                "zerolinecolor": "#d1d5db",
+            },
+            "aspectmode": "cube",
+            "camera": {
+                "eye": {"x": 1.65, "y": 1.55, "z": 1.25},
+                "center": {"x": 0.0, "y": 0.0, "z": 0.0},
+            },
+        },
+        "legend": {"x": 0.73, "y": 0.97, "bgcolor": "rgba(255,255,255,0.88)"},
+        "paper_bgcolor": "white",
+        "margin": {"l": 0, "r": 0, "t": 64, "b": 0},
+        "hovermode": "closest",
+    }
+    output_html = os.path.join(OUTPUT_FOLDER, method["output_html"])
+    html = build_html(traces, layout)
+    with open(output_html, "w", encoding="utf-8") as file_handle:
+        file_handle.write(html)
+    return (
+        output_html,
+        len(route_weights),
+        int(route_weights["is_direct_route"].sum()),
+        int((~route_weights["is_direct_route"]).sum()),
+        len(cluster_counts),
+    )
 
 
 def build_html(traces, layout):
@@ -363,6 +607,25 @@ def main():
     print("All successful route count:", len(route_weights))
     print("Direct route count:", int(route_weights["is_direct_route"].sum()))
     print("Non-direct route count:", int((~route_weights["is_direct_route"]).sum()))
+
+    for method in CLUSTER_METHODS:
+        cluster_weights = load_cluster_weight_table(method)
+        cluster_weights = add_barycentric_coordinates(cluster_weights)
+        (
+            output_html,
+            route_count,
+            direct_count,
+            non_direct_count,
+            cluster_count,
+        ) = make_cluster_plot(
+            cluster_weights,
+            method,
+        )
+        print(
+            f"Saved {method['label']} barycentric plot: {output_html} "
+            f"({route_count} routes, {direct_count} direct, "
+            f"{non_direct_count} non-direct, {cluster_count} clusters)"
+        )
 
 
 if __name__ == "__main__":
