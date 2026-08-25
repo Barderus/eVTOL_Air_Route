@@ -119,9 +119,36 @@ The static map converts `airport_risk_combined` into three display classes:
 - Medium: `30 < airport_risk_combined <= 70`
 - High: `airport_risk_combined > 70`
 
-## Routing Weight
+## Routing Weights
 
-When the airspace layer is used in the combined A* route cost, its current
-weight is:
+The fixed combined-route workflow uses the current project weights:
 
+- Distance = `0.6`
+- Population = `0.9`
+- Traffic = `1.0`
 - Airspace = `1.4`
+
+These weights are used by the standard A* route-generation scripts. They do
+not add up to `1.0`, and they should not be treated as normalized route
+robustness weights.
+
+The route robustness workflow is a separate sensitivity analysis. It generates
+normalized four-factor weight combinations where:
+
+```text
+distance_weight + population_weight + traffic_weight + airspace_weight = 1.0
+```
+
+The current robustness grid uses `0.10` increments plus an explicit
+equal-weight case:
+
+```text
+Distance = 0.25
+Population = 0.25
+Traffic = 0.25
+Airspace = 0.25
+```
+
+That creates `287` tested weight configurations per route pair. The airspace
+layer used by both workflows is still `airport_risk_combined`; only the way it
+is weighted changes.

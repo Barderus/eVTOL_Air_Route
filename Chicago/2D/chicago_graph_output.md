@@ -1,138 +1,108 @@
-# Chicago Graph Output
+# Chicago 2D Route Output
 
-## Current routing setup
+## Current Status
 
-### Grid and graph model
+The active Chicago 2D route workflow is `generate_astar_toggle_pages.py`. It builds A* route comparisons from Clow International Airport to three destinations:
 
-- Source grid: `geojson/risk_grid_v6.geojson`
-- Airport airspace source: `airport_risk_combined` from the grid
-- Air traffic source: `opensky/output/ohare_2019-03-09_local_1s_15nm_bbox.csv`
+- Union Station
+- O'Hare International Airport
+- Midway International Airport
+
+The older `chicago_graph.py` script is still useful as a smaller one-file route builder. It currently runs the same cost model for Clow to Union Station and writes a single GeoJSON file.
+
+## Grid And Graph Model
+
+- Source grid: `Chicago/geojson/risk_grid_v7.geojson`
 - Nodes: grid cells
-- Edges: any two cells whose polygons touch, including diagonal neighbors
-- Start point: Clow
-- End point: Union Station
+- Edges: touching cells, including diagonal neighbors
+- Static airspace source: `airport_risk_combined`
+- Population source: `city_risk`
+- Air traffic source: OpenSky `1s` CSV observations joined into the grid
 
-### Risk layers used by the current script
+The graph connects adjacent grid cells and routes through centroid-to-centroid line segments. This is a planning and comparison model, not an operational flight path.
 
-The current `2D/chicago_graph.py` uses four independent route terms:
+## Route Cost Terms
 
-1. Distance
-   - centroid-to-centroid edge distance in `EPSG:3857`
-2. Population
-   - `city_risk` from `geojson/risk_grid_v6.geojson`
-3. Airport airspace
-   - `airport_risk_combined` from `geojson/risk_grid_v6.geojson`
-4. Air traffic density
-   - derived from the `1s` OpenSky CSV by spatially joining flight observations into the grid and computing:
-     - `traffic_count`
-     - `traffic_density` in observations per square kilometer
-
-This distinction matters:
-
-- `airspace` means the airport-related static cost from the risk grid
-- `air traffic density` means the observed flight-density layer from the `1s` traffic data
-
-### Cost normalization
-
-For the current normalized routing runs, each edge cost is built from four normalized terms:
-
-- `distance_norm = edge_distance_m / max_edge_distance_m`
-- `population_norm = 0.5 * (city_risk_norm[u] + city_risk_norm[v])`
-- `airspace_norm = 0.5 * (airport_risk_norm[u] + airport_risk_norm[v])`
-- `traffic_norm = 0.5 * (traffic_density_norm[u] + traffic_density_norm[v])`
-
-Where:
-
-- `city_risk_norm = city_risk / max(city_risk)`
-- `airport_risk_norm = airport_risk_combined / max(airport_risk_combined)`
-- `traffic_density_norm = traffic_density / max(traffic_density)`
-
-### A* heuristic
-
-For the grid-based A* runs, the heuristic uses Euclidean distance between cell centroids in Web Mercator meters (`EPSG:3857`):
+The current route scripts combine four normalized terms:
 
 ```text
-dx = cent_x[u] - cent_x[v]
-dy = cent_y[u] - cent_y[v]
-euclidean_distance_m = sqrt(dx^2 + dy^2)
+distance_norm
+population_norm
+airspace_norm
+traffic_norm
 ```
 
-The heuristic is scaled only by the route's distance weight:
+The fixed combined-route weights are:
+
+```text
+weight_combined = 0.6 * distance_norm
+                + 0.9 * population_norm
+                + 1.4 * airspace_norm
+                + 1.0 * traffic_norm
+```
+
+These are fixed A* route-generation weights. They are separate from the route robustness experiments, where normalized weight configurations sum to `1.0` and are clustered after route generation.
+
+## Route Modes
+
+The 2D A* workflow exports five route modes for each destination and traffic date:
+
+- `combined`
+- `airspace_only`
+- `population_only`
+- `distance_only`
+- `air_traffic_only`
+
+The single-factor routes isolate one cost layer at a time. The combined route uses all four cost layers with the fixed weights above.
+
+## Normalization
+
+Distance is normalized by the maximum neighbor edge distance. Population, airspace, and traffic are normalized before being assigned to graph edges.
+
+The current scripts use percentile clipping and power scaling where needed so dense airspace and traffic values do not dominate the route search:
+
+- `city_risk`: max normalization
+- `airport_risk_combined`: 99th percentile clipping with power scaling
+- `traffic_density`: `log1p`, 95th percentile clipping, and power scaling
+
+Each edge receives the average normalized cell cost from its two endpoint cells.
+
+## A* Heuristic
+
+The A* heuristic uses Euclidean distance between cell centroids in Web Mercator meters (`EPSG:3857`):
 
 ```text
 h(u, v) = distance_weight * (euclidean_distance_m / max_edge_distance_m)
 ```
 
-If a route has `distance_weight = 0`, the heuristic is `0`, which reduces A* to Dijkstra-style search for that route mode.
+When a route mode has `distance_weight = 0`, the heuristic is `0`, so the route search behaves like Dijkstra-style search for that route mode.
 
-## Current route definitions
+## Traffic Datasets
 
-Combined route:
+The active toggle-page workflow uses these OpenSky traffic files:
 
-```text
-weight_combined = 0.8 * distance_norm
-                + 0.9 * population_norm
-                + 1.1 * airspace_norm
-                + 1.4 * traffic_norm
-```
+- `Chicago/opensky/output/ohare_2026-03-07_1s_15nm_bbox.csv`
+- `Chicago/opensky/output/ohare_2026-03-09_1s_15nm_bbox.csv`
+- `Chicago/opensky/output/ohare_2026-01-10_1s_15nm_bbox.csv`
+- `Chicago/opensky/output/ohare_2026-01-12_1s_15nm_bbox.csv`
+- `Chicago/opensky/output/ohare_2025-07-14_1s_15nm_bbox.csv`
+- `Chicago/opensky/output/ohare_2025-07-12_1s_15nm_bbox.csv`
 
-Population-only route:
+## Outputs
 
-```text
-weight_population_only = 1.0 * population_norm
-```
+The active multi-destination workflow writes one GeoJSON and one self-contained Leaflet page per destination:
 
-Distance-only route:
+- `Chicago/geojson/clow_to_union_station_astar_routes.geojson`
+- `Chicago/geojson/clow_to_ohare_astar_routes.geojson`
+- `Chicago/geojson/clow_to_midway_astar_routes.geojson`
+- `Chicago/html/clow_to_union_station_astar.html`
+- `Chicago/html/clow_to_ohare_astar.html`
+- `Chicago/html/clow_to_midway_astar.html`
 
-```text
-weight_distance_only = 1.0 * distance_norm
-```
+The standalone `chicago_graph.py` script writes:
 
-Airspace-only route:
+- `Chicago/geojson/routes.geojson`
 
-```text
-weight_airspace_only = 1.0 * airspace_norm
-```
+## Relationship To Route Robustness
 
-Air-traffic-only route:
-
-```text
-weight_air_traffic_only = 1.0 * traffic_norm
-```
-
-## Verified run output
-
-These are the outputs from the current five-route version of `2D/chicago_graph.py`.
-
-```text
-Nodes: 51984
-Edges: 206513
-Traffic density source:
-  csv: C:\Users\Owner\PycharmProjects\EVOTL-MAP\opensky\output\ohare_2019-03-09_local_1s_15nm_bbox.csv
-  input rows used: 1152330
-  rows matched to grid: 1152330
-  nonzero traffic cells: 25387
-Normalization maxima:
-  distance max edge (m): 707.1067811924744
-  city_risk max: 120.0
-  airport_risk_combined max: 185.83015359113148
-  traffic_density max (obs/km^2): 116059.99999956765
-Route weights:
-  combined: 0.8 0.9 1.1 1.4
-Start node: 27975 End node: 45997
-combined: nodes=114 cost=126.2033 seconds=0.1448
-population_only: nodes=124 cost=33.0211 seconds=0.2376
-distance_only: nodes=110 cost=93.1838 seconds=0.0297
-airspace_only: nodes=411 cost=0.0252 seconds=0.1450
-air_traffic_only: nodes=326 cost=0.0042 seconds=0.1351
-Saved C:\Users\Owner\PycharmProjects\EVOTL-MAP\geojson\routes.geojson
-```
-
-## Map outputs
-
-- `geojson/routes.geojson` now contains both:
-  - `airspace_only`
-  - `air_traffic_only`
-- `html/routes_map.html` exposes both as separate toggleable layers:
-  - `Airspace Only`
-  - `Air Flight Density Only`
+This file documents the 2D A* route output layer. The route robustness work lives under `Chicago/route_robustness/` and studies how route geometry changes across many normalized weight configurations and clustering methods.
