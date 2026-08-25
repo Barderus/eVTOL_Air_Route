@@ -21,3 +21,9 @@ Chicago/Smoothing/*_costs.csv
 Chicago/images/**/*.png
 Chicago/images/icons/*.svg
 
+# Local agent configuration for agentic tool
+/ai-agent
+
+# Personal research notes
+/notes
+/docs
