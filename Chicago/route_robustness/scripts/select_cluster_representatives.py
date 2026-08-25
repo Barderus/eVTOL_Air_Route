@@ -6,10 +6,10 @@ import geopandas as gpd
 import pandas as pd
 
 
-ALL_ROUTES_GEOJSON = "route_robustness/output/all_routes.geojson"
-ALL_ROUTE_CLUSTERS_CSV = "route_robustness/output/all_route_clusters.csv"
-SIMILARITY_MATRIX_CSV = "route_robustness/output/all_route_similarity_matrix.csv"
-OUTPUT_FOLDER = "route_robustness/output"
+ALL_ROUTES_GEOJSON = "Chicago/route_robustness/output/all_routes.geojson"
+ALL_ROUTE_CLUSTERS_CSV = "Chicago/route_robustness/output/all_route_clusters.csv"
+SIMILARITY_MATRIX_CSV = "Chicago/route_robustness/output/all_route_similarity_matrix.csv"
+OUTPUT_FOLDER = "Chicago/route_robustness/output"
 REPRESENTATIVES_CSV = os.path.join(
     OUTPUT_FOLDER,
     "all_cluster_representative_routes.csv",

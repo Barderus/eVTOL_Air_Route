@@ -6,9 +6,9 @@ import networkx as nx
 import pandas as pd
 
 
-ALL_ROUTE_RUNS_CSV = "route_robustness/output/all_route_runs.csv"
-SIMILARITY_PAIRS_CSV = "route_robustness/output/all_route_similarity_pairs.csv"
-OUTPUT_FOLDER = "route_robustness/output"
+ALL_ROUTE_RUNS_CSV = "Chicago/route_robustness/output/all_route_runs.csv"
+SIMILARITY_PAIRS_CSV = "Chicago/route_robustness/output/all_route_similarity_pairs.csv"
+OUTPUT_FOLDER = "Chicago/route_robustness/output"
 SUMMARY_CSV = os.path.join(
     OUTPUT_FOLDER,
     "threshold_comparison_summary.csv",

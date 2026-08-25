@@ -7,8 +7,8 @@ import numpy as np
 import pandas as pd
 
 
-ALL_ROUTE_RUNS_CSV = "route_robustness/output/all_route_runs.csv"
-OUTPUT_FOLDER = "route_robustness/output"
+ALL_ROUTE_RUNS_CSV = "Chicago/route_robustness/output/all_route_runs.csv"
+OUTPUT_FOLDER = "Chicago/route_robustness/output"
 SIMILARITY_MATRIX_CSV = os.path.join(
     OUTPUT_FOLDER,
     "all_route_similarity_matrix.csv",

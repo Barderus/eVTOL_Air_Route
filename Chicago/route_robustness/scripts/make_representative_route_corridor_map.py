@@ -8,8 +8,8 @@ import geopandas as gpd
 from make_weight_barycentric_plot import CLUSTER_COLORS
 
 
-REPRESENTATIVE_ROUTES_GEOJSON = "route_robustness/output/representative_route.geojson"
-OUTPUT_FOLDER = "route_robustness/output"
+REPRESENTATIVE_ROUTES_GEOJSON = "Chicago/route_robustness/output/representative_route.geojson"
+OUTPUT_FOLDER = "Chicago/route_robustness/output"
 OUTPUT_GEOJSON = os.path.join(OUTPUT_FOLDER, "representative_route_corridor.geojson")
 OUTPUT_HTML = os.path.join(OUTPUT_FOLDER, "representative_route_corridor.html")
 

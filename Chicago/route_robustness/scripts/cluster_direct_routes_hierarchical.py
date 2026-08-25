@@ -7,9 +7,9 @@ import os
 import pandas as pd
 
 
-DIRECT_ROUTE_WEIGHTS_CSV = "route_robustness/output/direct_route_weight_configurations.csv"
-OUTPUT_FOLDER = "route_robustness/output"
-OUTPUT_CSV = "route_robustness/output/direct_route_clusters_hierarchical_jaccard.csv"
+DIRECT_ROUTE_WEIGHTS_CSV = "Chicago/route_robustness/output/direct_route_weight_configurations.csv"
+OUTPUT_FOLDER = "Chicago/route_robustness/output"
+OUTPUT_CSV = "Chicago/route_robustness/output/direct_route_clusters_hierarchical_jaccard.csv"
 
 HIERARCHICAL_JACCARD_THRESHOLD = 0.75
 

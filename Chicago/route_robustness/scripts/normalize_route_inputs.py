@@ -24,7 +24,7 @@ GRID_PATH = "Chicago/geojson/risk_grid_v7.geojson"
 TRAFFIC_CSV_PATH = "Chicago/opensky/output/ohare_2026-03-07_1s_15nm_bbox.csv"
 
 # Output files
-OUTPUT_FOLDER = "route_robustness/output"
+OUTPUT_FOLDER = "Chicago/route_robustness/output"
 WEIGHT_CONFIGURATIONS_CSV = os.path.join(
     OUTPUT_FOLDER,
     "weight_configurations.csv",

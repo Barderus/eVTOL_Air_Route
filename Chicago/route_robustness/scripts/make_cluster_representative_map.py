@@ -6,8 +6,8 @@ import os
 import geopandas as gpd
 
 
-REPRESENTATIVES_GEOJSON = "route_robustness/output/all_cluster_representative_routes.geojson"
-OUTPUT_FOLDER = "route_robustness/maps"
+REPRESENTATIVES_GEOJSON = "Chicago/route_robustness/output/all_cluster_representative_routes.geojson"
+OUTPUT_FOLDER = "Chicago/route_robustness/maps"
 OUTPUT_HTML = os.path.join(OUTPUT_FOLDER, "all_cluster_representative_routes.html")
 
 ORIGIN_LABEL = "Clow International Airport"

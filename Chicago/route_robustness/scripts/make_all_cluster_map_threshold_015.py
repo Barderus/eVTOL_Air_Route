@@ -7,9 +7,9 @@ import geopandas as gpd
 import pandas as pd
 
 
-ALL_ROUTES_GEOJSON = "route_robustness/output/all_routes.geojson"
-ALL_ROUTE_CLUSTERS_CSV = "route_robustness/output/all_route_clusters_threshold_015.csv"
-OUTPUT_FOLDER = "route_robustness/maps"
+ALL_ROUTES_GEOJSON = "Chicago/route_robustness/output/all_routes.geojson"
+ALL_ROUTE_CLUSTERS_CSV = "Chicago/route_robustness/output/all_route_clusters_threshold_015.csv"
+OUTPUT_FOLDER = "Chicago/route_robustness/maps"
 OUTPUT_HTML = os.path.join(OUTPUT_FOLDER, "all_route_clusters_threshold_015.html")
 
 ORIGIN_LABEL = "Clow International Airport"

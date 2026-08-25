@@ -6,17 +6,17 @@ import os
 import pandas as pd
 
 
-ALL_ROUTE_RUNS_CSV = "route_robustness/output/all_route_runs.csv"
-DIRECT_ROUTE_WEIGHTS_CSV = "route_robustness/output/direct_route_weight_configurations.csv"
-OUTPUT_FOLDER = "route_robustness/output"
+ALL_ROUTE_RUNS_CSV = "Chicago/route_robustness/output/all_route_runs.csv"
+DIRECT_ROUTE_WEIGHTS_CSV = "Chicago/route_robustness/output/direct_route_weight_configurations.csv"
+OUTPUT_FOLDER = "Chicago/route_robustness/output"
 OUTPUT_CSV = os.path.join(OUTPUT_FOLDER, "route_weight_barycentric_coordinates.csv")
 OUTPUT_HTML = os.path.join(OUTPUT_FOLDER, "route_weight_barycentric_plot.html")
-DBSCAN_CSV = "route_robustness/output/direct_route_clusters_dbscan.csv"
+DBSCAN_CSV = "Chicago/route_robustness/output/direct_route_clusters_dbscan.csv"
 HIERARCHICAL_CSV = (
-    "route_robustness/output/direct_route_clusters_hierarchical_jaccard.csv"
+    "Chicago/route_robustness/output/direct_route_clusters_hierarchical_jaccard.csv"
 )
-FRECHET_CSV = "route_robustness/output/direct_route_clusters_frechet.csv"
-EDIT_DISTANCE_CSV = "route_robustness/output/direct_route_clusters_edit_distance.csv"
+FRECHET_CSV = "Chicago/route_robustness/output/direct_route_clusters_frechet.csv"
+EDIT_DISTANCE_CSV = "Chicago/route_robustness/output/direct_route_clusters_edit_distance.csv"
 
 CLUSTER_METHODS = [
     {

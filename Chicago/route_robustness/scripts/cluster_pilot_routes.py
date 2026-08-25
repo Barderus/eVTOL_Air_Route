@@ -6,9 +6,9 @@ import networkx as nx
 import pandas as pd
 
 
-PILOT_ROUTE_RUNS_CSV = "route_robustness/output/pilot_route_runs.csv"
-SIMILARITY_PAIRS_CSV = "route_robustness/output/pilot_route_similarity_pairs.csv"
-OUTPUT_FOLDER = "route_robustness/output"
+PILOT_ROUTE_RUNS_CSV = "Chicago/route_robustness/output/pilot_route_runs.csv"
+SIMILARITY_PAIRS_CSV = "Chicago/route_robustness/output/pilot_route_similarity_pairs.csv"
+OUTPUT_FOLDER = "Chicago/route_robustness/output"
 PILOT_ROUTE_CLUSTERS_CSV = os.path.join(
     OUTPUT_FOLDER,
     "pilot_route_clusters.csv",

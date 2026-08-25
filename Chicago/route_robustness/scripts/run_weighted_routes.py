@@ -5,7 +5,7 @@ This script uses the first test case:
 - Clow International Airport in Bolingbrook
 - Chicago Union Station
 
-It reads `route_robustness/output/weight_configurations.csv`, selects 10 pilot
+It reads `Chicago/route_robustness/output/weight_configurations.csv`, selects 10 pilot
 weight configurations, and saves route measurements plus route geometry. The
 script is still configurable for another city by editing the settings near the
 top.
@@ -26,10 +26,10 @@ from shapely.geometry import LineString, Point
 # Input files
 GRID_PATH = "Chicago/geojson/risk_grid_v7.geojson"
 TRAFFIC_CSV_PATH = "Chicago/opensky/output/ohare_2026-03-07_1s_15nm_bbox.csv"
-WEIGHT_CONFIGURATIONS_CSV = "route_robustness/output/weight_configurations.csv"
+WEIGHT_CONFIGURATIONS_CSV = "Chicago/route_robustness/output/weight_configurations.csv"
 
 # Output files
-OUTPUT_FOLDER = "route_robustness/output"
+OUTPUT_FOLDER = "Chicago/route_robustness/output"
 ROUTE_RUNS_CSV = os.path.join(OUTPUT_FOLDER, "pilot_route_runs.csv")
 ROUTES_GEOJSON = os.path.join(OUTPUT_FOLDER, "pilot_routes.geojson")
 
