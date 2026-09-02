@@ -220,13 +220,13 @@ def build_route_pair_payload(route_pair, cluster_tables, features_by_id):
     return payload
 
 
-def html_template(payload):
+def html_template(payload, title_prefix="St. Louis Route Clusters"):
     """Build one route-pair Leaflet cluster map."""
     payload_json = json.dumps(payload)
     method_order_json = json.dumps(
         [{"key": method["key"], "label": method["label"]} for method in METHODS]
     )
-    title = f"St. Louis Route Clusters - {payload['routeLabel']}"
+    title = f"{title_prefix} - {payload['routeLabel']}"
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -442,11 +442,17 @@ def html_template(payload):
       routeLayer.clearLayers();
       clusterLayers = new Map();
       const methodData = routePayload.methods[activeMethod];
+      const largestCluster = Math.max(...methodData.clusters.map((cluster) => cluster.count), 1);
+      const clusterSizes = new Map(
+        methodData.clusters.map((cluster) => [cluster.cluster, cluster.count])
+      );
 
       methodData.routes.forEach((route) => {{
+        const clusterSize = clusterSizes.get(route.cluster) || 1;
+        const lineWeight = 2 + 5 * Math.sqrt(clusterSize / largestCluster);
         const line = L.polyline(route.points, {{
           color: route.color,
-          weight: 3.2,
+          weight: lineWeight,
           opacity: hiddenClusters.has(route.cluster) ? 0 : 0.42,
           interactive: true
         }}).bindPopup(popupHtml(route));
