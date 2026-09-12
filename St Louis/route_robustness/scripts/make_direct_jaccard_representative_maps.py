@@ -3,9 +3,10 @@
 import json
 from pathlib import Path
 
+import geopandas as gpd
 
 ROUTE_ROBUSTNESS = Path("St Louis") / "route_robustness"
-DIRECT_ROUTES_FOLDER = ROUTE_ROBUSTNESS / "route_clusters" / "direct_routes"
+DIRECT_ROUTES_FOLDER = ROUTE_ROBUSTNESS / "output" / "direct_routes"
 METHOD_SUFFIX = "hierarchical_jaccard"
 ROUTE_PAIRS = [
     "midamerica_to_st_louis_lambert",
@@ -16,6 +17,9 @@ COLORS = [
     "#1b9e77", "#d95f02", "#7570b3", "#e7298a", "#66a61e",
     "#e6ab02", "#1f78b4", "#a6761d", "#6a3d9a", "#33a02c",
 ]
+CORRIDOR_WIDTH_M = 4828.0
+CORRIDOR_BUFFER_M = CORRIDOR_WIDTH_M / 2.0
+PROJECTED_CRS = "EPSG:32615"
 
 
 HTML_TEMPLATE = """<!doctype html>
@@ -45,12 +49,13 @@ HTML_TEMPLATE = """<!doctype html>
     crossorigin=""></script>
   <script>
     const routeData = {route_data};
+    const corridorData = {corridor_data};
     const colors = {colors};
     const map = L.map("map", {{ preferCanvas: true }});
     L.tileLayer("https://{{s}}.basemaps.cartocdn.com/light_all/{{z}}/{{x}}/{{y}}{{r}}.png", {{
       maxZoom: 19, attribution: "&copy; OpenStreetMap contributors &copy; CARTO"
     }}).addTo(map);
-    const clusters = [...new Set(routeData.features.map((feature) => feature.properties.hierarchical_jaccard_cluster))];
+    const clusters = [...new Set(routeData.features.map((feature) => feature.properties.merged_cluster_id))];
     const largest = Math.max(...routeData.features.map((feature) => Number(feature.properties.cluster_size)), 1);
     const layers = {{}};
     function number(value, digits) {{
@@ -59,7 +64,7 @@ HTML_TEMPLATE = """<!doctype html>
     }}
     routeData.features.forEach((feature, index) => {{
       const p = feature.properties;
-      const cluster = p.hierarchical_jaccard_cluster;
+      const cluster = p.merged_cluster_id;
       const layer = L.geoJSON(feature, {{
         style: {{ color: colors[index % colors.length], weight: 3 + 5 * Math.sqrt(Number(p.cluster_size) / largest), opacity: .9 }},
         onEachFeature: (_, routeLayer) => routeLayer.bindPopup(
@@ -67,16 +72,27 @@ HTML_TEMPLATE = """<!doctype html>
           `<b>Representative:</b> ${{p.weight_id}}<br>` +
           `<b>Cluster size:</b> ${{p.cluster_size}} routes<br>` +
           `<b>Weight share:</b> ${{number(p.cluster_weight_space_percent, 1)}}%<br>` +
-          `<b>Mean Jaccard similarity:</b> ${{number(p.representative_mean_jaccard_similarity, 3)}}<br>` +
+          `<b>Mean Frechet distance:</b> ${{number(p.representative_mean_frechet_miles, 3)}} miles<br>` +
           `<b>Distance:</b> ${{number(p.route_distance_km, 2)}} km<br>` +
           `<b>Score:</b> ${{number(p.total_weighted_score, 3)}}<br>` +
           `<b>Weights:</b> D=${{p.distance_weight}}, P=${{p.population_weight}}, T=${{p.traffic_weight}}, A=${{p.airspace_weight}}`
         )
-      }}).addTo(map);
-      layers[`${{cluster}} (${{p.cluster_size}} routes)`] = layer;
+      }});
+      const corridorFeature = corridorData.features[index];
+      const corridorLayer = L.geoJSON(corridorFeature, {{
+        style: {{ color: colors[index % colors.length], weight: 1, opacity: .55, fillColor: colors[index % colors.length], fillOpacity: .18 }},
+        onEachFeature: (_, corridorLayer) => corridorLayer.bindPopup(
+          `<b>${{cluster}} corridor</b><br>` +
+          `<b>Width:</b> ${{number(p.corridor_width_m, 0)}} m (3 miles)<br>` +
+          `<b>Buffer each side:</b> ${{number(p.corridor_buffer_m, 0)}} m<br>` +
+          `<b>Cluster size:</b> ${{p.cluster_size}} routes`
+        )
+      }});
+      const routeGroup = L.layerGroup([corridorLayer, layer]).addTo(map);
+      layers[`${{cluster}} (${{p.cluster_size}} routes)`] = routeGroup;
     }});
     L.control.layers(null, layers, {{ collapsed: false }}).addTo(map);
-    const bounds = L.geoJSON(routeData).getBounds();
+    const bounds = L.geoJSON(corridorData).getBounds();
     if (bounds.isValid()) map.fitBounds(bounds.pad(.12));
     const origin = routeData.features[0].properties;
     L.marker([origin.origin_lat, origin.origin_lon]).bindPopup(`<b>Origin</b><br>${{origin.origin_label}}`).addTo(map);
@@ -86,7 +102,7 @@ HTML_TEMPLATE = """<!doctype html>
       const div = L.DomUtil.create("div", "panel");
       div.innerHTML = `<h1>Hierarchical + Jaccard Representatives</h1>` + routeData.features.map((feature, index) => {{
         const p = feature.properties;
-        return `<div class="row"><span class="line" style="border-top-color:${{colors[index % colors.length]}}"></span><span class="label"><strong>${{p.hierarchical_jaccard_cluster}} (${{p.cluster_size}} routes)</strong>representative ${{p.weight_id}}, mean similarity ${{number(p.representative_mean_jaccard_similarity, 3)}}</span></div>`;
+        return `<div class="row"><span class="line" style="border-top-color:${{colors[index % colors.length]}}"></span><span class="label"><strong>${{p.merged_cluster_id}} (${{p.cluster_size}} routes)</strong>representative ${{p.weight_id}}, mean Frechet ${{number(p.representative_mean_frechet_miles, 3)}} miles</span></div>`;
       }}).join("");
       return div;
     }};
@@ -97,19 +113,37 @@ HTML_TEMPLATE = """<!doctype html>
 """
 
 
+def build_corridors(routes):
+    """Build one independent 3-mile corridor around each representative route."""
+    projected = routes.to_crs(PROJECTED_CRS)
+    corridors = routes.copy()
+    corridors["geometry"] = projected.geometry.buffer(CORRIDOR_BUFFER_M)
+    corridors = corridors.to_crs("EPSG:4326")
+    corridors["corridor_width_m"] = CORRIDOR_WIDTH_M
+    corridors["corridor_buffer_m"] = CORRIDOR_BUFFER_M
+    return corridors
+
+
 def main():
     """Write one representative map for each OD pair."""
     for route_pair in ROUTE_PAIRS:
         path = DIRECT_ROUTES_FOLDER / f"{route_pair}_{METHOD_SUFFIX}_representatives.geojson"
         with path.open("r", encoding="utf-8") as file_handle:
             route_data = json.load(file_handle)
+        routes = gpd.GeoDataFrame.from_features(route_data["features"], crs="EPSG:4326")
+        corridors = build_corridors(routes)
+        corridor_data = json.loads(corridors.to_json())
         title = f"St. Louis Direct Route Representatives - {route_data['features'][0]['properties']['route_pair_label']}"
         html = HTML_TEMPLATE.format(
             title=title,
             route_data=json.dumps(route_data),
+            corridor_data=json.dumps(corridor_data),
             colors=json.dumps(COLORS),
         )
-        output_path = DIRECT_ROUTES_FOLDER / f"{route_pair}_hierarchical_jaccard_representatives.html"
+        corridor_path = DIRECT_ROUTES_FOLDER / f"{route_pair}_{METHOD_SUFFIX}_representatives_corridor.geojson"
+        corridor_path.write_text(json.dumps(corridor_data), encoding="utf-8")
+        output_path = ROUTE_ROBUSTNESS / "maps" / "representatives" / f"{route_pair}_hierarchical_jaccard_representatives.html"
+        output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(html, encoding="utf-8")
         print(f"Saved representative map: {output_path}")
 
