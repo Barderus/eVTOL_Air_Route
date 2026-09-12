@@ -13,11 +13,11 @@ from cluster_direct_routes_dbscan import (
 from make_weight_barycentric_plot import CLUSTER_COLORS
 
 
-DBSCAN_CLUSTERS_CSV = "Chicago/route_robustness/output/direct_route_clusters_dbscan.csv"
-OUTPUT_FOLDER = "Chicago/route_robustness/output"
+DBSCAN_CLUSTERS_CSV = "Chicago/route_robustness/output/cluster_assignments/direct_route_clusters_dbscan.csv"
+OUTPUT_FOLDER = "Chicago/route_robustness/output/representatives"
 OUTPUT_CSV = os.path.join(OUTPUT_FOLDER, "representative_route.csv")
 OUTPUT_GEOJSON = os.path.join(OUTPUT_FOLDER, "representative_route.geojson")
-OUTPUT_HTML = os.path.join(OUTPUT_FOLDER, "representative_route.html")
+OUTPUT_HTML = "Chicago/route_robustness/maps/representatives/representative_route.html"
 
 MAP_CENTER_LAT = 41.79
 MAP_CENTER_LON = -87.88

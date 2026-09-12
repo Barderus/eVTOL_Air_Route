@@ -9,32 +9,35 @@ import pandas as pd
 
 ST_LOUIS_ROBUSTNESS = Path("St Louis") / "route_robustness"
 OUTPUT_FOLDER = ST_LOUIS_ROBUSTNESS / "output"
-MAPS_FOLDER = ST_LOUIS_ROBUSTNESS / "tetrahedrons_barycentric"
-ROUTE_RUNS_CSV = OUTPUT_FOLDER / "st_louis_weighted_route_runs.csv"
-BARYCENTRIC_CSV = OUTPUT_FOLDER / "st_louis_route_weight_barycentric_coordinates.csv"
+CLUSTER_ASSIGNMENTS_FOLDER = OUTPUT_FOLDER / "cluster_assignments"
+WEIGHTED_ROUTES_FOLDER = OUTPUT_FOLDER / "weighted_routes"
+BARYCENTRIC_OUTPUT_FOLDER = OUTPUT_FOLDER / "barycentric"
+MAPS_FOLDER = ST_LOUIS_ROBUSTNESS / "maps" / "barycentric"
+ROUTE_RUNS_CSV = WEIGHTED_ROUTES_FOLDER / "st_louis_weighted_route_runs.csv"
+BARYCENTRIC_CSV = BARYCENTRIC_OUTPUT_FOLDER / "st_louis_route_weight_barycentric_coordinates.csv"
 
 CLUSTER_METHODS = [
     {
         "label": "DBSCAN On Frechet",
-        "file": OUTPUT_FOLDER / "st_louis_route_clusters_dbscan.csv",
+        "file": CLUSTER_ASSIGNMENTS_FOLDER / "st_louis_route_clusters_dbscan.csv",
         "cluster_column": "dbscan_cluster",
         "suffix": "dbscan",
     },
     {
         "label": "Hierarchical On Edit Distance",
-        "file": OUTPUT_FOLDER / "st_louis_route_clusters_edit_distance.csv",
+        "file": CLUSTER_ASSIGNMENTS_FOLDER / "st_louis_route_clusters_edit_distance.csv",
         "cluster_column": "edit_distance_cluster",
         "suffix": "edit_distance",
     },
     {
         "label": "Hierarchical On Frechet",
-        "file": OUTPUT_FOLDER / "st_louis_route_clusters_frechet.csv",
+        "file": CLUSTER_ASSIGNMENTS_FOLDER / "st_louis_route_clusters_frechet.csv",
         "cluster_column": "frechet_cluster",
         "suffix": "frechet",
     },
     {
         "label": "Hierarchical On Jaccard",
-        "file": OUTPUT_FOLDER / "st_louis_route_clusters_hierarchical_jaccard.csv",
+        "file": CLUSTER_ASSIGNMENTS_FOLDER / "st_louis_route_clusters_hierarchical_jaccard.csv",
         "cluster_column": "hierarchical_jaccard_cluster",
         "suffix": "hierarchical_jaccard",
     },
@@ -623,6 +626,7 @@ def main():
         )
 
     MAPS_FOLDER.mkdir(parents=True, exist_ok=True)
+    BARYCENTRIC_OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
     route_runs = pd.read_csv(ROUTE_RUNS_CSV)
     require_columns(
         route_runs,

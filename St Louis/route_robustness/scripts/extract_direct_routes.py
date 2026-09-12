@@ -8,30 +8,30 @@ import pandas as pd
 
 ROUTE_ROBUSTNESS = Path("St Louis") / "route_robustness"
 OUTPUT_FOLDER = ROUTE_ROBUSTNESS / "output"
-DIRECT_ROUTES_FOLDER = ROUTE_ROBUSTNESS / "route_clusters" / "direct_routes"
-ROUTES_GEOJSON = OUTPUT_FOLDER / "st_louis_weighted_routes.geojson"
+DIRECT_ROUTES_FOLDER = ROUTE_ROBUSTNESS / "output" / "direct_routes"
+ROUTES_GEOJSON = OUTPUT_FOLDER / "weighted_routes" / "st_louis_weighted_routes.geojson"
 
 METHODS = {
     "dbscan_frechet": {
-        "input": OUTPUT_FOLDER / "st_louis_route_clusters_dbscan.csv",
+        "input": OUTPUT_FOLDER / "cluster_assignments" / "st_louis_route_clusters_dbscan.csv",
         "cluster_column": "dbscan_cluster",
         "cluster_prefix": "dbscan",
         "distance_method": "frechet",
     },
     "hierarchical_edit_distance": {
-        "input": OUTPUT_FOLDER / "st_louis_route_clusters_edit_distance.csv",
+        "input": OUTPUT_FOLDER / "cluster_assignments" / "st_louis_route_clusters_edit_distance.csv",
         "cluster_column": "edit_distance_cluster",
         "cluster_prefix": "edit",
         "distance_method": "edit_distance",
     },
     "hierarchical_frechet": {
-        "input": OUTPUT_FOLDER / "st_louis_route_clusters_frechet.csv",
+        "input": OUTPUT_FOLDER / "cluster_assignments" / "st_louis_route_clusters_frechet.csv",
         "cluster_column": "frechet_cluster",
         "cluster_prefix": "frechet",
         "distance_method": "frechet",
     },
     "hierarchical_jaccard": {
-        "input": OUTPUT_FOLDER / "st_louis_route_clusters_hierarchical_jaccard.csv",
+        "input": OUTPUT_FOLDER / "cluster_assignments" / "st_louis_route_clusters_hierarchical_jaccard.csv",
         "cluster_column": "hierarchical_jaccard_cluster",
         "cluster_prefix": "hier_jaccard",
         "distance_method": "jaccard",

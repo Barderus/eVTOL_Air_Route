@@ -9,32 +9,32 @@ import pandas as pd
 
 CHICAGO_ROBUSTNESS = Path("Chicago") / "route_robustness"
 OUTPUT_FOLDER = CHICAGO_ROBUSTNESS / "output"
-MAPS_FOLDER = CHICAGO_ROBUSTNESS / "additional_tetrahedrons_barycentric"
-ROUTE_RUNS_CSV = OUTPUT_FOLDER / "additional_route_runs.csv"
-BARYCENTRIC_CSV = OUTPUT_FOLDER / "additional_route_weight_barycentric_coordinates.csv"
+MAPS_FOLDER = CHICAGO_ROBUSTNESS / "maps" / "barycentric"
+ROUTE_RUNS_CSV = OUTPUT_FOLDER / "weighted_routes" / "additional_route_runs.csv"
+BARYCENTRIC_CSV = OUTPUT_FOLDER / "barycentric" / "additional_route_weight_barycentric_coordinates.csv"
 
 CLUSTER_METHODS = [
     {
         "label": "DBSCAN On Frechet",
-        "file": OUTPUT_FOLDER / "additional_route_clusters_dbscan.csv",
+        "file": OUTPUT_FOLDER / "cluster_assignments" / "additional_route_clusters_dbscan.csv",
         "cluster_column": "dbscan_cluster",
         "suffix": "dbscan",
     },
     {
         "label": "Hierarchical On Edit Distance",
-        "file": OUTPUT_FOLDER / "additional_route_clusters_edit_distance.csv",
+        "file": OUTPUT_FOLDER / "cluster_assignments" / "additional_route_clusters_edit_distance.csv",
         "cluster_column": "edit_distance_cluster",
         "suffix": "edit_distance",
     },
     {
         "label": "Hierarchical On Frechet",
-        "file": OUTPUT_FOLDER / "additional_route_clusters_frechet.csv",
+        "file": OUTPUT_FOLDER / "cluster_assignments" / "additional_route_clusters_frechet.csv",
         "cluster_column": "frechet_cluster",
         "suffix": "frechet",
     },
     {
         "label": "Hierarchical On Jaccard",
-        "file": OUTPUT_FOLDER / "additional_route_clusters_hierarchical_jaccard.csv",
+        "file": OUTPUT_FOLDER / "cluster_assignments" / "additional_route_clusters_hierarchical_jaccard.csv",
         "cluster_column": "hierarchical_jaccard_cluster",
         "suffix": "hierarchical_jaccard",
     },
@@ -623,6 +623,7 @@ def main():
         )
 
     MAPS_FOLDER.mkdir(parents=True, exist_ok=True)
+    BARYCENTRIC_CSV.parent.mkdir(parents=True, exist_ok=True)
     route_runs = pd.read_csv(ROUTE_RUNS_CSV)
     require_columns(
         route_runs,

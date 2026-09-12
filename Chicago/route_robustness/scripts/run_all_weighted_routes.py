@@ -15,10 +15,10 @@ from shapely.geometry import LineString, Point
 # Input files
 GRID_PATH = "Chicago/geojson/risk_grid_v7.geojson"
 TRAFFIC_CSV_PATH = "Chicago/opensky/output/ohare_2026-03-07_1s_15nm_bbox.csv"
-WEIGHT_CONFIGURATIONS_CSV = "Chicago/route_robustness/output/weight_configurations.csv"
+WEIGHT_CONFIGURATIONS_CSV = "Chicago/route_robustness/output/weighted_routes/weight_configurations.csv"
 
 # Output files
-OUTPUT_FOLDER = "Chicago/route_robustness/output"
+OUTPUT_FOLDER = "Chicago/route_robustness/output/weighted_routes"
 ROUTE_RUNS_CSV = os.path.join(OUTPUT_FOLDER, "all_route_runs.csv")
 ROUTES_GEOJSON = os.path.join(OUTPUT_FOLDER, "all_routes.geojson")
 ADDITIONAL_ROUTE_RUNS_CSV = os.path.join(OUTPUT_FOLDER, "additional_route_runs.csv")

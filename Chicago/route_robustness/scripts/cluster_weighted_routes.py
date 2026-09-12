@@ -9,13 +9,15 @@ import pandas as pd
 
 
 OUTPUT_FOLDER = Path("Chicago") / "route_robustness" / "output"
-ROUTE_RUNS_CSV = OUTPUT_FOLDER / "additional_route_runs.csv"
-ROUTES_GEOJSON = OUTPUT_FOLDER / "additional_routes.geojson"
+WEIGHTED_ROUTES_FOLDER = OUTPUT_FOLDER / "weighted_routes"
+CLUSTER_ASSIGNMENTS_FOLDER = OUTPUT_FOLDER / "cluster_assignments"
+ROUTE_RUNS_CSV = WEIGHTED_ROUTES_FOLDER / "additional_route_runs.csv"
+ROUTES_GEOJSON = WEIGHTED_ROUTES_FOLDER / "additional_routes.geojson"
 
-DBSCAN_OUTPUT_CSV = OUTPUT_FOLDER / "additional_route_clusters_dbscan.csv"
-EDIT_OUTPUT_CSV = OUTPUT_FOLDER / "additional_route_clusters_edit_distance.csv"
-FRECHET_OUTPUT_CSV = OUTPUT_FOLDER / "additional_route_clusters_frechet.csv"
-JACCARD_OUTPUT_CSV = OUTPUT_FOLDER / "additional_route_clusters_hierarchical_jaccard.csv"
+DBSCAN_OUTPUT_CSV = CLUSTER_ASSIGNMENTS_FOLDER / "additional_route_clusters_dbscan.csv"
+EDIT_OUTPUT_CSV = CLUSTER_ASSIGNMENTS_FOLDER / "additional_route_clusters_edit_distance.csv"
+FRECHET_OUTPUT_CSV = CLUSTER_ASSIGNMENTS_FOLDER / "additional_route_clusters_frechet.csv"
+JACCARD_OUTPUT_CSV = CLUSTER_ASSIGNMENTS_FOLDER / "additional_route_clusters_hierarchical_jaccard.csv"
 
 DBSCAN_EPS_KM = 2.5
 DBSCAN_MIN_SAMPLES = 4

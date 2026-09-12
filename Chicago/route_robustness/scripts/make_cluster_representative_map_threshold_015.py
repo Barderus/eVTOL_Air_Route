@@ -7,9 +7,9 @@ import geopandas as gpd
 
 
 REPRESENTATIVES_GEOJSON = (
-    "Chicago/route_robustness/output/all_cluster_representative_routes_threshold_015.geojson"
+    "Chicago/route_robustness/output/representatives/all_cluster_representative_routes_threshold_015.geojson"
 )
-OUTPUT_FOLDER = "Chicago/route_robustness/maps"
+OUTPUT_FOLDER = "Chicago/route_robustness/maps/representatives"
 OUTPUT_HTML = os.path.join(
     OUTPUT_FOLDER,
     "all_cluster_representative_routes_threshold_015.html",

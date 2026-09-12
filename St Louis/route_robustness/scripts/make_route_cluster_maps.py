@@ -9,32 +9,33 @@ import pandas as pd
 
 ST_LOUIS_ROBUSTNESS = Path("St Louis") / "route_robustness"
 OUTPUT_FOLDER = ST_LOUIS_ROBUSTNESS / "output"
-MAPS_FOLDER = ST_LOUIS_ROBUSTNESS / "route_clusters"
-ROUTES_GEOJSON = OUTPUT_FOLDER / "st_louis_weighted_routes.geojson"
+CLUSTER_ASSIGNMENTS_FOLDER = OUTPUT_FOLDER / "cluster_assignments"
+MAPS_FOLDER = ST_LOUIS_ROBUSTNESS / "maps" / "route_clusters"
+ROUTES_GEOJSON = OUTPUT_FOLDER / "weighted_routes" / "st_louis_weighted_routes.geojson"
 
 METHODS = [
     {
         "key": "dbscan",
         "label": "DBSCAN",
-        "file": OUTPUT_FOLDER / "st_louis_route_clusters_dbscan.csv",
+        "file": CLUSTER_ASSIGNMENTS_FOLDER / "st_louis_route_clusters_dbscan.csv",
         "cluster_column": "dbscan_cluster",
     },
     {
         "key": "edit_distance",
         "label": "Edit Distance",
-        "file": OUTPUT_FOLDER / "st_louis_route_clusters_edit_distance.csv",
+        "file": CLUSTER_ASSIGNMENTS_FOLDER / "st_louis_route_clusters_edit_distance.csv",
         "cluster_column": "edit_distance_cluster",
     },
     {
         "key": "frechet",
         "label": "Frechet",
-        "file": OUTPUT_FOLDER / "st_louis_route_clusters_frechet.csv",
+        "file": CLUSTER_ASSIGNMENTS_FOLDER / "st_louis_route_clusters_frechet.csv",
         "cluster_column": "frechet_cluster",
     },
     {
         "key": "hierarchical_jaccard",
         "label": "Hierarchical Jaccard",
-        "file": OUTPUT_FOLDER / "st_louis_route_clusters_hierarchical_jaccard.csv",
+        "file": CLUSTER_ASSIGNMENTS_FOLDER / "st_louis_route_clusters_hierarchical_jaccard.csv",
         "cluster_column": "hierarchical_jaccard_cluster",
     },
 ]

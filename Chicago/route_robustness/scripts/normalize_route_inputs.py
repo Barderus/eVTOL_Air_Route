@@ -24,9 +24,10 @@ GRID_PATH = "Chicago/geojson/risk_grid_v7.geojson"
 TRAFFIC_CSV_PATH = "Chicago/opensky/output/ohare_2026-03-07_1s_15nm_bbox.csv"
 
 # Output files
-OUTPUT_FOLDER = "Chicago/route_robustness/output"
+OUTPUT_FOLDER = "Chicago/route_robustness/output/weighted_routes"
+ANALYSIS_OUTPUT_FOLDER = "Chicago/route_robustness/output/analysis"
 WEIGHT_CONFIGURATIONS_CSV = os.path.join(
-    OUTPUT_FOLDER,
+    ANALYSIS_OUTPUT_FOLDER,
     "weight_configurations.csv",
 )
 NORMALIZATION_SUMMARY_CSV = os.path.join(
@@ -383,6 +384,7 @@ def main():
     require_grid_columns(grid)
 
     os.makedirs(OUTPUT_FOLDER, exist_ok=True)
+    os.makedirs(ANALYSIS_OUTPUT_FOLDER, exist_ok=True)
 
     normalization_summary = build_normalization_summary(grid)
     weight_configurations = build_weight_configurations()

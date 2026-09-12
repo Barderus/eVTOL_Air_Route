@@ -13,7 +13,7 @@ import make_route_cluster_maps as route_maps
 
 
 ROUTE_ROBUSTNESS = Path("St Louis") / "route_robustness"
-DIRECT_ROUTES_FOLDER = ROUTE_ROBUSTNESS / "route_clusters" / "direct_routes"
+DIRECT_ROUTES_FOLDER = ROUTE_ROBUSTNESS / "output" / "direct_routes"
 
 METHODS = [
     {
@@ -78,7 +78,8 @@ def main():
             payload = route_maps.build_route_pair_payload(
                 route_pair, tables, features_by_id
             )
-            output_path = DIRECT_ROUTES_FOLDER / f"{route_pair}_direct_routes.html"
+            output_path = ROUTE_ROBUSTNESS / "maps" / "direct_routes" / f"{route_pair}_direct_routes.html"
+            output_path.parent.mkdir(parents=True, exist_ok=True)
             output_path.write_text(
                 route_maps.html_template(
                     payload, title_prefix="St. Louis Direct Route Clusters"

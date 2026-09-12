@@ -6,15 +6,15 @@ import os
 import pandas as pd
 
 
-DIRECT_ROUTE_WEIGHTS_CSV = "Chicago/route_robustness/output/direct_route_weight_configurations.csv"
-JACCARD_CSV = "Chicago/route_robustness/output/direct_route_clusters_jaccard.csv"
-DBSCAN_CSV = "Chicago/route_robustness/output/direct_route_clusters_dbscan.csv"
-OPTICS_CSV = "Chicago/route_robustness/output/direct_route_clusters_optics.csv"
-HIERARCHICAL_CSV = "Chicago/route_robustness/output/direct_route_clusters_hierarchical_jaccard.csv"
-FRECHET_CSV = "Chicago/route_robustness/output/direct_route_clusters_frechet.csv"
-EDIT_DISTANCE_CSV = "Chicago/route_robustness/output/direct_route_clusters_edit_distance.csv"
-ALL_ROUTES_GEOJSON = "Chicago/route_robustness/output/all_routes.geojson"
-MAP_FOLDER = "Chicago/route_robustness/maps"
+DIRECT_ROUTE_WEIGHTS_CSV = "Chicago/route_robustness/output/direct_routes/direct_route_weight_configurations.csv"
+JACCARD_CSV = "Chicago/route_robustness/output/cluster_assignments/direct_route_clusters_jaccard.csv"
+DBSCAN_CSV = "Chicago/route_robustness/output/cluster_assignments/direct_route_clusters_dbscan.csv"
+OPTICS_CSV = "Chicago/route_robustness/output/cluster_assignments/direct_route_clusters_optics.csv"
+HIERARCHICAL_CSV = "Chicago/route_robustness/output/cluster_assignments/direct_route_clusters_hierarchical_jaccard.csv"
+FRECHET_CSV = "Chicago/route_robustness/output/cluster_assignments/direct_route_clusters_frechet.csv"
+EDIT_DISTANCE_CSV = "Chicago/route_robustness/output/cluster_assignments/direct_route_clusters_edit_distance.csv"
+ALL_ROUTES_GEOJSON = "Chicago/route_robustness/output/weighted_routes/all_routes.geojson"
+MAP_FOLDER = "Chicago/route_robustness/maps/direct_routes"
 
 MAP_CENTER_LAT = 41.79
 MAP_CENTER_LON = -87.88

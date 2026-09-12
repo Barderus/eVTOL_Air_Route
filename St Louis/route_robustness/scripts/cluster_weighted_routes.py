@@ -9,13 +9,15 @@ import pandas as pd
 
 
 OUTPUT_FOLDER = Path("St Louis") / "route_robustness" / "output"
-ROUTE_RUNS_CSV = OUTPUT_FOLDER / "st_louis_weighted_route_runs.csv"
-ROUTES_GEOJSON = OUTPUT_FOLDER / "st_louis_weighted_routes.geojson"
+WEIGHTED_ROUTES_FOLDER = OUTPUT_FOLDER / "weighted_routes"
+CLUSTER_ASSIGNMENTS_FOLDER = OUTPUT_FOLDER / "cluster_assignments"
+ROUTE_RUNS_CSV = WEIGHTED_ROUTES_FOLDER / "st_louis_weighted_route_runs.csv"
+ROUTES_GEOJSON = WEIGHTED_ROUTES_FOLDER / "st_louis_weighted_routes.geojson"
 
-DBSCAN_OUTPUT_CSV = OUTPUT_FOLDER / "st_louis_route_clusters_dbscan.csv"
-EDIT_OUTPUT_CSV = OUTPUT_FOLDER / "st_louis_route_clusters_edit_distance.csv"
-FRECHET_OUTPUT_CSV = OUTPUT_FOLDER / "st_louis_route_clusters_frechet.csv"
-JACCARD_OUTPUT_CSV = OUTPUT_FOLDER / "st_louis_route_clusters_hierarchical_jaccard.csv"
+DBSCAN_OUTPUT_CSV = CLUSTER_ASSIGNMENTS_FOLDER / "st_louis_route_clusters_dbscan.csv"
+EDIT_OUTPUT_CSV = CLUSTER_ASSIGNMENTS_FOLDER / "st_louis_route_clusters_edit_distance.csv"
+FRECHET_OUTPUT_CSV = CLUSTER_ASSIGNMENTS_FOLDER / "st_louis_route_clusters_frechet.csv"
+JACCARD_OUTPUT_CSV = CLUSTER_ASSIGNMENTS_FOLDER / "st_louis_route_clusters_hierarchical_jaccard.csv"
 
 DBSCAN_EPS_KM = 2.5
 DBSCAN_MIN_SAMPLES = 4
@@ -385,7 +387,8 @@ def cluster_method_for_all_pairs(
 
 def main():
     """Save St. Louis cluster CSVs for all requested route-distance methods."""
-    OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
+    WEIGHTED_ROUTES_FOLDER.mkdir(parents=True, exist_ok=True)
+    CLUSTER_ASSIGNMENTS_FOLDER.mkdir(parents=True, exist_ok=True)
     routes = load_routes()
     route_features = load_route_features()
 

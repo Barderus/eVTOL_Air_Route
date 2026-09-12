@@ -1,6 +1,7 @@
 """Run St. Louis route robustness A* routes for normalized weight grids."""
 
 import argparse
+import csv
 import json
 import math
 import os
@@ -22,13 +23,78 @@ sys.path.insert(0, str(REPO_ROOT))
 
 import astar_routes  # noqa: E402
 import settings  # noqa: E402
-from api_tool.generate_weight_configurations import generate_weight_configurations  # noqa: E402
 
 
 OUTPUT_FOLDER = ST_LOUIS_DIR / "route_robustness" / "output"
-ROUTE_RUNS_CSV = OUTPUT_FOLDER / "st_louis_weighted_route_runs.csv"
-ROUTES_GEOJSON = OUTPUT_FOLDER / "st_louis_weighted_routes.geojson"
-WEIGHT_CONFIGURATIONS_CSV = OUTPUT_FOLDER / "st_louis_weight_configurations.csv"
+WEIGHTED_ROUTES_FOLDER = OUTPUT_FOLDER / "weighted_routes"
+ROUTE_RUNS_CSV = WEIGHTED_ROUTES_FOLDER / "st_louis_weighted_route_runs.csv"
+ROUTES_GEOJSON = WEIGHTED_ROUTES_FOLDER / "st_louis_weighted_routes.geojson"
+WEIGHT_CONFIGURATIONS_CSV = WEIGHTED_ROUTES_FOLDER / "st_louis_weight_configurations.csv"
+
+
+def save_weight_configurations(rows, output_path):
+    """Save weight configurations as CSV."""
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with output_path.open("w", encoding="utf-8", newline="") as output_file:
+        writer = csv.DictWriter(output_file, fieldnames=list(rows[0].keys()))
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def generate_weight_configurations(step=0.10, output_path=None, include_equal_weight=True):
+    """Generate valid four-factor weights that sum to 1.0."""
+    if step <= 0 or step > 1:
+        raise ValueError("step must be greater than 0 and less than or equal to 1.")
+
+    unit_count = round(1 / step)
+    resolved_step = 1 / unit_count
+    rows = []
+    seen_weights = set()
+
+    for distance_units in range(unit_count + 1):
+        for population_units in range(unit_count + 1):
+            for traffic_units in range(unit_count + 1):
+                airspace_units = (
+                    unit_count - distance_units - population_units - traffic_units
+                )
+                if airspace_units < 0:
+                    continue
+
+                weights = (
+                    round(distance_units * resolved_step, 6),
+                    round(population_units * resolved_step, 6),
+                    round(traffic_units * resolved_step, 6),
+                    round(airspace_units * resolved_step, 6),
+                )
+                seen_weights.add(weights)
+
+    if include_equal_weight:
+        seen_weights.add((0.25, 0.25, 0.25, 0.25))
+
+    for index, weights in enumerate(sorted(seen_weights), start=1):
+        distance_weight, population_weight, traffic_weight, airspace_weight = weights
+        rows.append(
+            {
+                "weight_id": f"w_{index:04d}",
+                "distance_weight": distance_weight,
+                "population_weight": population_weight,
+                "traffic_weight": traffic_weight,
+                "airspace_weight": airspace_weight,
+                "weight_sum": round(sum(weights), 6),
+                "weight_step": round(resolved_step, 6),
+            }
+        )
+
+    if output_path:
+        save_weight_configurations(rows, Path(output_path))
+
+    return {
+        "weight_configurations": rows,
+        "count": len(rows),
+        "step": round(resolved_step, 6),
+        "output_path": output_path,
+    }
 
 
 def slugify(value):
@@ -191,7 +257,7 @@ def main():
 
     settings.validate_route_settings()
     os.chdir(ST_LOUIS_DIR)
-    OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
+    WEIGHTED_ROUTES_FOLDER.mkdir(parents=True, exist_ok=True)
 
     if not os.path.exists(settings.RISK_GRID_GEOJSON):
         raise FileNotFoundError(f"St. Louis risk grid not found: {settings.RISK_GRID_GEOJSON}")

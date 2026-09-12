@@ -7,9 +7,9 @@ import os
 import pandas as pd
 
 
-DIRECT_ROUTE_WEIGHTS_CSV = "Chicago/route_robustness/output/direct_route_weight_configurations.csv"
-OUTPUT_FOLDER = "Chicago/route_robustness/output"
-OUTPUT_CSV = "Chicago/route_robustness/output/direct_route_clusters_edit_distance.csv"
+DIRECT_ROUTE_WEIGHTS_CSV = "Chicago/route_robustness/output/direct_routes/direct_route_weight_configurations.csv"
+OUTPUT_FOLDER = "Chicago/route_robustness/output/cluster_assignments"
+OUTPUT_CSV = "Chicago/route_robustness/output/cluster_assignments/direct_route_clusters_edit_distance.csv"
 
 EDIT_DISTANCE_THRESHOLD = 0.35
 

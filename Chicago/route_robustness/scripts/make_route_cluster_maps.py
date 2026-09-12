@@ -9,32 +9,32 @@ import pandas as pd
 
 CHICAGO_ROBUSTNESS = Path("Chicago") / "route_robustness"
 OUTPUT_FOLDER = CHICAGO_ROBUSTNESS / "output"
-MAPS_FOLDER = CHICAGO_ROBUSTNESS / "additional_route_clusters"
-ROUTES_GEOJSON = OUTPUT_FOLDER / "additional_routes.geojson"
+MAPS_FOLDER = CHICAGO_ROBUSTNESS / "maps" / "route_clusters"
+ROUTES_GEOJSON = OUTPUT_FOLDER / "weighted_routes" / "additional_routes.geojson"
 
 METHODS = [
     {
         "key": "dbscan",
         "label": "DBSCAN",
-        "file": OUTPUT_FOLDER / "additional_route_clusters_dbscan.csv",
+        "file": OUTPUT_FOLDER / "cluster_assignments" / "additional_route_clusters_dbscan.csv",
         "cluster_column": "dbscan_cluster",
     },
     {
         "key": "edit_distance",
         "label": "Edit Distance",
-        "file": OUTPUT_FOLDER / "additional_route_clusters_edit_distance.csv",
+        "file": OUTPUT_FOLDER / "cluster_assignments" / "additional_route_clusters_edit_distance.csv",
         "cluster_column": "edit_distance_cluster",
     },
     {
         "key": "frechet",
         "label": "Frechet",
-        "file": OUTPUT_FOLDER / "additional_route_clusters_frechet.csv",
+        "file": OUTPUT_FOLDER / "cluster_assignments" / "additional_route_clusters_frechet.csv",
         "cluster_column": "frechet_cluster",
     },
     {
         "key": "hierarchical_jaccard",
         "label": "Hierarchical Jaccard",
-        "file": OUTPUT_FOLDER / "additional_route_clusters_hierarchical_jaccard.csv",
+        "file": OUTPUT_FOLDER / "cluster_assignments" / "additional_route_clusters_hierarchical_jaccard.csv",
         "cluster_column": "hierarchical_jaccard_cluster",
     },
 ]

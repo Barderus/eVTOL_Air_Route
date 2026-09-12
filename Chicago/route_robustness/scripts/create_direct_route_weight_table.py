@@ -6,10 +6,10 @@ import os
 import pandas as pd
 
 
-ALL_ROUTE_RUNS_CSV = "Chicago/route_robustness/output/all_route_runs.csv"
-ALL_ROUTE_CLUSTERS_CSV = "Chicago/route_robustness/output/all_route_clusters.csv"
-OUTPUT_FOLDER = "Chicago/route_robustness/output"
-OUTPUT_CSV = "Chicago/route_robustness/output/direct_route_weight_configurations.csv"
+ALL_ROUTE_RUNS_CSV = "Chicago/route_robustness/output/weighted_routes/all_route_runs.csv"
+ALL_ROUTE_CLUSTERS_CSV = "Chicago/route_robustness/output/cluster_assignments/all_route_clusters.csv"
+OUTPUT_FOLDER = "Chicago/route_robustness/output/direct_routes"
+OUTPUT_CSV = "Chicago/route_robustness/output/direct_routes/direct_route_weight_configurations.csv"
 
 DIRECT_SOURCE_CLUSTERS = {
     "cluster_001",
