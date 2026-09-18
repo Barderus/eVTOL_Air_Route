@@ -182,6 +182,44 @@ def build_method_payload(method, clusters, features_by_id, route_pair):
     }
 
 
+def build_background_routes(features_by_id, route_pair, excluded_route_ids):
+    """Build non-selected route lines for optional direct-route context."""
+    routes = []
+    bounds_points = []
+    for route_run_id, feature in features_by_id.items():
+        if route_run_id in excluded_route_ids:
+            continue
+
+        properties = feature["properties"]
+        if properties.get("route_pair") != route_pair:
+            continue
+
+        points = simplify_line(
+            coordinates_to_latlon(feature["geometry"]["coordinates"])
+        )
+        bounds_points.extend(points)
+        routes.append(
+            {
+                "route_run_id": route_run_id,
+                "weight_id": properties["weight_id"],
+                "cluster": "Other routes",
+                "color": "#000000",
+                "points": points,
+                "distance_km": round(float(properties["route_distance_km"]), 3),
+                "score": round(float(properties["total_weighted_score"]), 3),
+                "path_nodes": int(properties["path_nodes"]),
+                "weights": {
+                    "distance": float(properties["distance_weight"]),
+                    "population": float(properties["population_weight"]),
+                    "traffic": float(properties["traffic_weight"]),
+                    "airspace": float(properties["airspace_weight"]),
+                },
+            }
+        )
+
+    return routes, bounds_points
+
+
 def build_route_pair_payload(route_pair, cluster_tables, features_by_id):
     """Build all method payloads for one route pair."""
     first_table = next(iter(cluster_tables.values()))
@@ -197,6 +235,8 @@ def build_route_pair_payload(route_pair, cluster_tables, features_by_id):
         "origin": None,
         "destination": None,
         "methods": {},
+        "backgroundRoutes": [],
+        "backgroundBounds": [],
     }
 
     sample_feature = features_by_id[first_row["route_run_id"]]
@@ -222,6 +262,18 @@ def build_route_pair_payload(route_pair, cluster_tables, features_by_id):
             route_pair,
         )
 
+    return payload
+
+
+def add_background_routes(payload, features_by_id, route_pair, excluded_route_ids):
+    """Attach all non-direct routes as optional black context lines."""
+    routes, bounds_points = build_background_routes(
+        features_by_id,
+        route_pair,
+        excluded_route_ids,
+    )
+    payload["backgroundRoutes"] = routes
+    payload["backgroundBounds"] = bounds_points
     return payload
 
 
@@ -352,6 +404,25 @@ def html_template(payload, title_prefix="St. Louis Route Clusters"):
       border-radius: 999px;
       border: 1px solid rgba(17, 24, 39, 0.25);
     }}
+    .context-toggle {{
+      appearance: none;
+      width: 100%;
+      margin: 0 0 9px;
+      padding: 7px 8px;
+      border: 1px solid rgba(17, 24, 39, 0.24);
+      border-radius: 6px;
+      background: #ffffff;
+      color: inherit;
+      cursor: pointer;
+      font: inherit;
+      text-align: left;
+    }}
+    .context-toggle:hover {{ background: rgba(229, 231, 235, 0.55); }}
+    .context-toggle.active {{
+      color: #ffffff;
+      background: #000000;
+      border-color: #000000;
+    }}
     .leaflet-popup-content {{
       min-width: 210px;
       font-size: 12px;
@@ -397,11 +468,13 @@ def html_template(payload, title_prefix="St. Louis Route Clusters"):
     const methodToggle = document.getElementById("methodToggle");
     const statusEl = document.getElementById("status");
     const routeLayer = L.layerGroup().addTo(map);
+    const backgroundLayer = L.layerGroup();
     const endpointLayer = L.layerGroup().addTo(map);
     const clusterControl = L.control({{ position: "topright" }});
     let activeMethod = methodOrder[0].key;
     let hiddenClusters = new Set();
     let clusterLayers = new Map();
+    let backgroundVisible = false;
     let controlDiv = null;
 
     clusterControl.onAdd = function() {{
@@ -473,14 +546,52 @@ def html_template(payload, title_prefix="St. Louis Route Clusters"):
       }});
 
       renderClusterControl();
+      updateStatus();
+    }}
+
+    function drawBackgroundRoutes() {{
+      backgroundLayer.clearLayers();
+      if (!backgroundVisible) {{
+        map.removeLayer(backgroundLayer);
+        return;
+      }}
+
+      (routePayload.backgroundRoutes || []).forEach((route) => {{
+        L.polyline(route.points, {{
+          color: "#000000",
+          weight: 1.6,
+          opacity: 0.28,
+          interactive: true
+        }}).bindPopup(popupHtml(route)).addTo(backgroundLayer);
+      }});
+      backgroundLayer.addTo(map);
+    }}
+
+    function updateStatus() {{
+      const methodData = routePayload.methods[activeMethod];
+      const backgroundCount = (routePayload.backgroundRoutes || []).length;
+      const backgroundLabel = backgroundVisible
+        ? `, ${{backgroundCount}} other routes visible`
+        : `, ${{backgroundCount}} other routes hidden`;
       statusEl.textContent =
         `${{methodData.label}}: ${{methodData.clusters.length}} clusters, ` +
-        `${{methodData.routes.length}} route weights`;
+        `${{methodData.routes.length}} direct route weights${{backgroundLabel}}`;
     }}
 
     function renderClusterControl() {{
       const methodData = routePayload.methods[activeMethod];
+      const backgroundCount = (routePayload.backgroundRoutes || []).length;
+      const contextControl = backgroundCount > 0 ? `
+        <button
+          class="context-toggle ${{backgroundVisible ? "active" : ""}}"
+          type="button"
+          data-context="background"
+        >
+          Other routes (${{backgroundCount}})
+        </button>
+      ` : "";
       controlDiv.innerHTML = `
+        ${{contextControl}}
         <strong>${{methodData.label}} Clusters (${{methodData.clusters.length}})</strong>
         ${{methodData.clusters.map((cluster) => `
           <button
@@ -494,6 +605,16 @@ def html_template(payload, title_prefix="St. Louis Route Clusters"):
           </button>
         `).join("")}}
       `;
+
+      const contextButton = controlDiv.querySelector("[data-context='background']");
+      if (contextButton) {{
+        contextButton.addEventListener("click", () => {{
+          backgroundVisible = !backgroundVisible;
+          contextButton.classList.toggle("active", backgroundVisible);
+          drawBackgroundRoutes();
+          updateStatus();
+        }});
+      }}
 
       controlDiv.querySelectorAll(".cluster-row").forEach((row) => {{
         row.addEventListener("click", () => {{
@@ -512,6 +633,7 @@ def html_template(payload, title_prefix="St. Louis Route Clusters"):
               layer.addTo(routeLayer);
             }}
           }});
+          updateStatus();
         }});
       }});
     }}
@@ -525,6 +647,7 @@ def html_template(payload, title_prefix="St. Louis Route Clusters"):
         button.setAttribute("aria-pressed", isActive ? "true" : "false");
       }});
       drawRoutes();
+      drawBackgroundRoutes();
     }}
 
     methodOrder.forEach((method) => {{
@@ -539,7 +662,9 @@ def html_template(payload, title_prefix="St. Louis Route Clusters"):
     drawEndpoints();
     setActiveMethod(activeMethod);
 
-    const firstBounds = routePayload.methods[activeMethod].bounds;
+    const firstBounds = routePayload.methods[activeMethod].bounds.concat(
+      routePayload.backgroundBounds || []
+    );
     if (firstBounds.length > 0) {{
       map.fitBounds(firstBounds, {{ padding: [28, 28] }});
     }}
