@@ -8,7 +8,7 @@ Chicago/3D/output/
 St Louis/traffic/output/
 St Louis/routes/output/
 St Louis/maps/*.geojson
-St Louis/population/st_louis_population_density.geojson
+St Louis/population/st_louis_population_density.geojson # file over 100mb
 
 # Generated geospatial and analysis artifacts
 Chicago/geojson/*.geojson
@@ -20,8 +20,9 @@ Chicago/Smoothing/*_costs.csv
 # Generated visualizations and local icon assets
 Chicago/images/**/*.png
 Chicago/images/icons/*.svg
+Chicago/html/ohare_density_leaflet.html
 
-# Local agent configuration for agentic tool
+# Local agent configuration for agentic tool development [ on pause for now]
 /ai-agent
 
 # Personal research notes
