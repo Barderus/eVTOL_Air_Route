@@ -42,6 +42,14 @@ def load_direct_cluster_tables(route_pair):
     return tables
 
 
+def direct_route_ids(tables):
+    """Return every selected direct-route id across the active direct methods."""
+    route_ids = set()
+    for table in tables.values():
+        route_ids.update(table["route_run_id"])
+    return route_ids
+
+
 def main():
     """Create one direct-route map for each St. Louis route pair."""
     if not (DIRECT_ROUTES_FOLDER / "direct_routes_manifest.csv").exists():
@@ -59,6 +67,12 @@ def main():
             tables = load_direct_cluster_tables(route_pair)
             payload = route_maps.build_route_pair_payload(
                 route_pair, tables, features_by_id
+            )
+            payload = route_maps.add_background_routes(
+                payload,
+                features_by_id,
+                route_pair,
+                direct_route_ids(tables),
             )
             output_path = DATE_ROOT / "maps" / "direct_routes" / f"{route_pair}_direct_routes.html"
             output_path.parent.mkdir(parents=True, exist_ok=True)
