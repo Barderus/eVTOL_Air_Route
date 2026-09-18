@@ -12,28 +12,10 @@ sys.path.insert(0, str(SCRIPT_FOLDER))
 import make_route_cluster_maps as route_maps
 
 
-ROUTE_ROBUSTNESS = Path("St Louis") / "route_robustness"
-DIRECT_ROUTES_FOLDER = ROUTE_ROBUSTNESS / "output" / "direct_routes"
+DATE_ROOT = Path(__file__).resolve().parents[1]
+DIRECT_ROUTES_FOLDER = DATE_ROOT / "output" / "direct_routes"
 
 METHODS = [
-    {
-        "key": "dbscan_frechet",
-        "label": "DBSCAN + Frechet",
-        "file_suffix": "dbscan_frechet",
-        "cluster_column": "dbscan_cluster",
-    },
-    {
-        "key": "hierarchical_edit_distance",
-        "label": "Hierarchical + Edit Distance",
-        "file_suffix": "hierarchical_edit_distance",
-        "cluster_column": "edit_distance_cluster",
-    },
-    {
-        "key": "hierarchical_frechet",
-        "label": "Hierarchical + Frechet",
-        "file_suffix": "hierarchical_frechet",
-        "cluster_column": "frechet_cluster",
-    },
     {
         "key": "hierarchical_jaccard",
         "label": "Hierarchical + Jaccard",
@@ -60,6 +42,14 @@ def load_direct_cluster_tables(route_pair):
     return tables
 
 
+def direct_route_ids(tables):
+    """Return every selected direct-route id across the active direct methods."""
+    route_ids = set()
+    for table in tables.values():
+        route_ids.update(table["route_run_id"])
+    return route_ids
+
+
 def main():
     """Create one direct-route map for each St. Louis route pair."""
     if not (DIRECT_ROUTES_FOLDER / "direct_routes_manifest.csv").exists():
@@ -78,7 +68,13 @@ def main():
             payload = route_maps.build_route_pair_payload(
                 route_pair, tables, features_by_id
             )
-            output_path = ROUTE_ROBUSTNESS / "maps" / "direct_routes" / f"{route_pair}_direct_routes.html"
+            payload = route_maps.add_background_routes(
+                payload,
+                features_by_id,
+                route_pair,
+                direct_route_ids(tables),
+            )
+            output_path = DATE_ROOT / "maps" / "direct_routes" / f"{route_pair}_direct_routes.html"
             output_path.parent.mkdir(parents=True, exist_ok=True)
             output_path.write_text(
                 route_maps.html_template(
